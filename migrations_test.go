@@ -2,18 +2,19 @@ package main
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 )
 
 func TestMigrations(t *testing.T) {
-	migs, err := Migrations("testdata/migrations")
+	migs, err := GetMigrations("testdata/migrations")
 	if err != nil {
 		t.Fatalf("Migrations: %v", err)
 	}
 
-	exp := []*Migration{
+	exp := Migrations{
 		{
 			Number:   0,
 			Title:    "init",
@@ -55,7 +56,7 @@ func TestMigrationsFail(t *testing.T) {
 	}
 	for dir, exp := range tests {
 		t.Run(dir, func(t *testing.T) {
-			_, err := Migrations("testdata/" + dir)
+			_, err := GetMigrations("testdata/" + dir)
 			t.Logf("%v", err)
 			if !errors.Is(err, exp) {
 				t.Errorf("%v wants %v", err, exp)
@@ -65,21 +66,37 @@ func TestMigrationsFail(t *testing.T) {
 }
 
 func TestNewestMigration(t *testing.T) {
-	mig, err := NewestMigration("testdata/migrations")
+	migs, err := GetMigrations("testdata/migrations")
 	if err != nil {
 		t.Fatal(err)
 	}
+	mig := migs.Newest()
 	if mig.Number != 4 {
 		t.Fatalf("migration is not newest: %v", mig.Number)
 	}
 }
 
-func TestNewestSnapshot(t *testing.T) {
-	mig, err := NewestSnapshot("testdata/migrations")
+func TestFromSnapshot(t *testing.T) {
+	migs, err := GetMigrations("testdata/migrations")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mig.Number != 3 {
-		t.Fatalf("snapshot is not newest: %v", mig.Number)
+
+	exp := []int{3, 4}
+	nums := make([]int, 0, len(migs))
+	for _, m := range migs.FromSnapshot() {
+		nums = append(nums, m.Number)
+	}
+	if !reflect.DeepEqual(nums, exp) {
+		t.Fatalf("from snapshot: %v wants %v", nums, exp)
+	}
+
+	exp = []int{0, 1, 3}
+	nums = nums[:0]
+	for _, m := range migs.FromSnapshotTo(3) {
+		nums = append(nums, m.Number)
+	}
+	if !reflect.DeepEqual(nums, exp) {
+		t.Fatalf("from snapshot to '3': %v wants %v", nums, exp)
 	}
 }

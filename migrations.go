@@ -37,13 +37,22 @@ type Migration struct {
 	Snapshot bool
 }
 
+// Migration list
+type Migrations []*Migration
+
 // UpName returns filename of '*.up.sql'.
 func (m *Migration) UpName() string {
+	if !m.UpDown {
+		return ""
+	}
 	return fmt.Sprintf("%06d_%s.up.sql", m.Number, m.Title)
 }
 
 // DownName returns filename of '*.down.sql'.
 func (m *Migration) DownName() string {
+	if !m.UpDown {
+		return ""
+	}
 	return fmt.Sprintf("%06d_%s.down.sql", m.Number, m.Title)
 }
 
@@ -55,9 +64,9 @@ func (m *Migration) SnapshotName() string {
 	return fmt.Sprintf("%06d_%s.all.sql", m.Number, m.Title)
 }
 
-// Migrations returns all migration SQL files in the dir.
+// GetMigrations returns all migration SQL files in the dir.
 // This list is sorted by its number.
-func Migrations(dir string) ([]*Migration, error) {
+func GetMigrations(dir string) (Migrations, error) {
 	dent, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -130,23 +139,38 @@ func Migrations(dir string) ([]*Migration, error) {
 	return migs, nil
 }
 
-func NewestMigration(dir string) (*Migration, error) {
-	migs, err := Migrations(dir)
-	if err != nil {
-		return nil, err
-	}
-	return migs[len(migs)-1], nil
-}
-
-func NewestSnapshot(dir string) (*Migration, error) {
-	migs, err := Migrations(dir)
-	if err != nil {
-		return nil, err
-	}
+func (migs Migrations) Newest() *Migration {
 	for i := len(migs) - 1; i >= 0; i-- {
-		if migs[i].Snapshot {
-			return migs[i], nil
+		if migs[i].UpDown {
+			return migs[i]
 		}
 	}
-	return nil, ErrNoMigration
+	return nil
+}
+
+func (migs Migrations) FromSnapshot() Migrations {
+	if len(migs) == 0 {
+		return migs //empty
+	}
+	return migs.FromSnapshotTo(migs[len(migs)-1].Number)
+}
+
+func (migs Migrations) FromSnapshotTo(num int) Migrations {
+	last := -1
+	for i := len(migs) - 1; i >= 0; i-- {
+		if migs[i].Number == num {
+			last = i
+			break
+		}
+	}
+	if last < 0 {
+		return Migrations{}
+	}
+	for i := last - 1; i >= 0; i-- {
+		if migs[i].Snapshot {
+			return migs[i : last+1]
+		}
+	}
+	warning("no snapshot (*.all.sql) found")
+	return migs[:last+1]
 }

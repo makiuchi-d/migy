@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"text/template"
@@ -45,20 +46,31 @@ DELETE FROM _migrations WHERE id = {{.Number}};
 )
 
 func createNewMigrationFiles(dir string, num int, title string) error {
+	migs, err := GetMigrations(dir)
+	if err != nil {
+		return err
+	}
+
 	if num == 0 {
-		newest, err := NewestMigration(dir)
-		if err != nil {
-			return err
+		num = migs[len(migs)-1].Number + 1
+	} else {
+		for i := len(migs) - 1; i >= 0; i-- {
+			n := migs[i].Number
+			if n < num {
+				break
+			}
+			if n == num {
+				return fmt.Errorf("duplicate number: %06d %v", n, migs[i].Title)
+			}
 		}
-		num = newest.Number
 	}
 
 	mig := Migration{
-		Number: num + 1,
+		Number: num,
 		Title:  title,
 	}
 
-	err := generateMigrationSQLFile(dir, mig.UpName(), createUpSQL, mig)
+	err = generateMigrationSQLFile(dir, mig.UpName(), createUpSQL, mig)
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,11 @@
 package main
 
-import "github.com/spf13/cobra"
+import (
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+)
 
 var cmd = &cobra.Command{
 	Use:           "migy",
@@ -21,6 +26,11 @@ func init() {
 func main() {
 	err := cmd.Execute()
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, "error:", err.Error())
+		os.Exit(-1)
 	}
+}
+
+func warning(msg string) {
+	fmt.Fprintln(os.Stderr, "warning:", msg)
 }
