@@ -2,7 +2,56 @@ package main
 
 import (
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/jmoiron/sqlx"
+	"github.com/makiuchi-d/testdb"
 )
+
+var testSQL = []byte(`-- test SQL
+
+/*
+ * SCHEMA
+ */
+
+CREATE TABLE _migrations (
+   id      INTEGER NOT NULL,
+   applied DATETIME,
+   title   VARCHAR(255),
+   PRIMARY KEY (id)
+);;
+
+CREATE TABLE users (
+  id INTEGER NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  PRIMARY KEY (id)
+);
+
+/*
+ * STORED PROCEDURE
+ */
+
+DELIMITER // -- make delimiter "//"
+
+CREATE PROCEDURE _migration_exists(IN input_id INTEGER)
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM _migrations WHERE id = input_id) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'migration not found';
+    END IF;
+END //
+
+\d; --/* return to default delimiter ';'
+
+/*
+ * TEST DATA
+ */
+
+INSERT INTO _migrations (id, applied, title) VALUES (1, '2025-04-19 00:33:32', 'first');
+INSERT INTO users (id, name) VALUES (1, 'alice'), (2, 'bob'), (3, 'carol');
+
+-- end of file
+`)
 
 func TestSkipSpaces(t *testing.T) {
 	tests := map[string]struct {
@@ -149,69 +198,33 @@ func TestChangeDelimiter(t *testing.T) {
 	}
 }
 
-func TestParse(t *testing.T) {
-	src := []byte(`-- test SQL input
-
-/*
- * SCHEMA
- */
-
-CREATE TABLE test (
-  id bigint NOT NULL,
-  title varchar(255) NOT NULL comment 'test title;',
-  created datetime,
-  PRIMARY KEY (id)
-);
-
-/*
- * STORED PROCEDURE
- */
-DELIMITER // -- make delimiter "//"
-
-CREATE PROCEDURE test_exists(IN input_id bigint)
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM test WHERE id = input_id) THEN
-        SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = 'Record not found';
-    END IF;
-END//
-
-\d; --/* return to default delimiter ';'
-
-/*
- * TEST DATA
- */
-
-INSERT INTO test (id, name, created) VALUES
-  (1, 'first test', now()), -- first test;
-  (2, 'second test', now()) -- second test//
-);
-
--- end of file
-`)
-
+func TestParseSQL(t *testing.T) {
 	exp := []string{
-		`CREATE TABLE test (
-  id bigint NOT NULL,
-  title varchar(255) NOT NULL comment 'test title;',
-  created datetime,
+		`CREATE TABLE _migrations (
+   id      INTEGER NOT NULL,
+   applied DATETIME,
+   title   VARCHAR(255),
+   PRIMARY KEY (id)
+)`,
+		`CREATE TABLE users (
+  id INTEGER NOT NULL,
+  name VARCHAR(255) NOT NULL,
   PRIMARY KEY (id)
 )`,
-		`CREATE PROCEDURE test_exists(IN input_id bigint)
+		`CREATE PROCEDURE _migration_exists(IN input_id INTEGER)
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM test WHERE id = input_id) THEN
+    IF NOT EXISTS (SELECT 1 FROM _migrations WHERE id = input_id) THEN
         SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = 'Record not found';
+            SET MESSAGE_TEXT = 'migration not found';
     END IF;
-END`,
-		`INSERT INTO test (id, name, created) VALUES
-  (1, 'first test', now()), -- first test;
-  (2, 'second test', now()) -- second test//
-)`,
+END `,
+
+		`INSERT INTO _migrations (id, applied, title) VALUES (1, '2025-04-19 00:33:32', 'first')`,
+		`INSERT INTO users (id, name) VALUES (1, 'alice'), (2, 'bob'), (3, 'carol')`,
 	}
 
 	n := 0
-	for stmt := range Parse(src) {
+	for stmt := range ParseSQL(testSQL) {
 		t.Logf("stmt[%v]\n%v\n", n, stmt)
 		if n >= len(exp) {
 			t.Fatalf("unexpected: %v", stmt)
@@ -224,5 +237,82 @@ END`,
 	}
 	if n != len(exp) {
 		t.Fatalf("not parsed: %v", exp[n:])
+	}
+}
+
+func TestGetTables(t *testing.T) {
+	db := sqlx.NewDb(testdb.New("db"), "mysql")
+	for s := range ParseSQL(testSQL) {
+		_, err := db.Exec(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tbls, err := getTables(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	exp := []Table{
+		{
+			Name: "_migrations",
+			Create: "" +
+				"CREATE TABLE `_migrations` (\n" +
+				"  `id` int NOT NULL,\n" +
+				"  `applied` datetime,\n" +
+				"  `title` varchar(255),\n" +
+				"  PRIMARY KEY (`id`)\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin",
+		},
+		{
+			Name: "users",
+			Create: "" +
+				"CREATE TABLE `users` (\n" +
+				"  `id` int NOT NULL,\n" +
+				"  `name` varchar(255) NOT NULL,\n" +
+				"  PRIMARY KEY (`id`)\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin",
+		},
+	}
+
+	if diff := cmp.Diff(tbls, exp); diff != "" {
+		t.Fatal(diff)
+	}
+}
+
+func TestGetProcedures(t *testing.T) {
+	db := sqlx.NewDb(testdb.New("db"), "mysql")
+	for s := range ParseSQL(testSQL) {
+		_, err := db.Exec(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	procs, err := getProcedures(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	exp := []Procedure{
+		{
+			Name: "_migration_exists",
+			Create: "" +
+				"CREATE PROCEDURE _migration_exists(IN input_id INTEGER)\n" +
+				"BEGIN\n" +
+				"    IF NOT EXISTS (SELECT 1 FROM _migrations WHERE id = input_id) THEN\n" +
+				"        SIGNAL SQLSTATE '45000'\n" +
+				"            SET MESSAGE_TEXT = 'migration not found';\n" +
+				"    END IF;\n" +
+				"END",
+			Charset:     "utf8mb4",
+			Collation:   "utf8mb4_0900_bin",
+			DBCollation: "utf8mb4_0900_bin",
+		},
+	}
+
+	if diff := cmp.Diff(procs, exp); diff != "" {
+		t.Fatal(diff)
 	}
 }

@@ -2,8 +2,13 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
+	"fmt"
 	"iter"
+	"os"
 	"strings"
+
+	"github.com/jmoiron/sqlx"
 )
 
 func skipSpaces(input []byte) (length int) {
@@ -115,8 +120,8 @@ func changeDelimiter(input []byte) (delimiter []byte, length int) {
 	return line, p + len(line)
 }
 
-// Parse extracts SQL statements from an SQL string
-func Parse(input []byte) iter.Seq[string] {
+// ParseSQL extracts SQL statements from an SQL string
+func ParseSQL(input []byte) iter.Seq[string] {
 	return func(yield func(string) bool) {
 		delim := []byte{';'}
 		inStmt := false
@@ -171,4 +176,96 @@ func Parse(input []byte) iter.Seq[string] {
 			yield(string(input[start:p]))
 		}
 	}
+}
+
+// ApplySQLFile applies SQL file to db.DB
+func ApplySQLFile(db *sql.DB, file string) error {
+	input, err := os.ReadFile(file)
+	if err != nil {
+		return err
+	}
+	for s := range ParseSQL(input) {
+		_, err := db.Exec(s)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type Snapshot struct {
+	Tables     []Table
+	Procedures []Procedure
+	// Triggers
+	// Functions
+	// Vews
+	// Events
+}
+
+type Table struct {
+	Name   string `db:"Table"`
+	Create string `db:"Create Table"`
+}
+
+type Procedure struct {
+	Name        string `db:"Procedure"`
+	Mode        string `db:"sql_mode"`
+	Create      string `db:"Create Procedure"`
+	Charset     string `db:"character_set_client"`
+	Collation   string `db:"collation_connection"`
+	DBCollation string `db:"Database Collation"`
+}
+
+// GetSnapshot returns a snapshot of the current database state.
+func GetSnapshot(db *sqlx.DB) (*Snapshot, error) {
+	tbls, err := getTables(db)
+	if err != nil {
+		return nil, err
+	}
+	procs, err := getProcedures(db)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Snapshot{
+		Tables:     tbls,
+		Procedures: procs,
+	}, nil
+}
+
+func getTables(db *sqlx.DB) ([]Table, error) {
+	var nms []string
+	if err := db.Select(&nms, "SHOW TABLES"); err != nil {
+		return nil, err
+	}
+	tbls := make([]Table, 0, len(nms))
+	for _, n := range nms {
+		var t Table
+		err := db.Get(&t, fmt.Sprintf("SHOW CREATE TABLE `%s`", n))
+		if err != nil {
+			return nil, err
+		}
+		tbls = append(tbls, t)
+	}
+	return tbls, nil
+}
+
+func getProcedures(db *sqlx.DB) ([]Procedure, error) {
+	// Note: go-mysql-server does not currently support "SHOW PROCEDURE STATUS" or "information_schema.routines".
+	// This function returns only the required stored procedures.
+	// Update this implementation if support is added in the future.
+	var nms []string
+	nms = append(nms, "_migration_exists")
+
+	procs := make([]Procedure, 0, len(nms))
+	for _, n := range nms {
+		var p Procedure
+		err := db.Get(&p, fmt.Sprintf("SHOW CREATE PROCEDURE `%s`", n))
+		if err != nil {
+			return nil, err
+		}
+		procs = append(procs, p)
+	}
+
+	return procs, nil
 }
