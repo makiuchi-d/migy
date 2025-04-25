@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -52,6 +54,16 @@ INSERT INTO users (id, name) VALUES (1, 'alice'), (2, 'bob'), (3, 'carol');
 
 -- end of file
 `)
+
+func prepareTestDb(t *testing.T) *sqlx.DB {
+	db := sqlx.NewDb(testdb.New("db"), "mysql")
+	for s := range ParseSQL(testSQL) {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return db
+}
 
 func TestSkipSpaces(t *testing.T) {
 	tests := map[string]struct {
@@ -241,13 +253,7 @@ END `,
 }
 
 func TestGetTables(t *testing.T) {
-	db := sqlx.NewDb(testdb.New("db"), "mysql")
-	for s := range ParseSQL(testSQL) {
-		_, err := db.Exec(s)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
+	db := prepareTestDb(t)
 
 	tbls, err := getTables(db)
 	if err != nil {
@@ -282,13 +288,7 @@ func TestGetTables(t *testing.T) {
 }
 
 func TestGetProcedures(t *testing.T) {
-	db := sqlx.NewDb(testdb.New("db"), "mysql")
-	for s := range ParseSQL(testSQL) {
-		_, err := db.Exec(s)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
+	db := prepareTestDb(t)
 
 	procs, err := getProcedures(db)
 	if err != nil {
@@ -313,6 +313,25 @@ func TestGetProcedures(t *testing.T) {
 	}
 
 	if diff := cmp.Diff(procs, exp); diff != "" {
+		t.Fatal(diff)
+	}
+}
+
+func TestDump(t *testing.T) {
+	exp, err := os.ReadFile("testdata/dump/golden.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	db := prepareTestDb(t)
+	buf := bytes.NewBuffer(nil)
+
+	err = Dump(buf, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if diff := cmp.Diff(buf.String(), string(exp)); diff != "" {
 		t.Fatal(diff)
 	}
 }

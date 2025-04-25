@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
+	"io"
 	"iter"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -193,7 +195,7 @@ func ApplySQLFile(db *sql.DB, file string) error {
 	return nil
 }
 
-type Snapshot struct {
+type Schema struct {
 	Tables     []Table
 	Procedures []Procedure
 	// Triggers
@@ -216,8 +218,8 @@ type Procedure struct {
 	DBCollation string `db:"Database Collation"`
 }
 
-// GetSnapshot returns a snapshot of the current database state.
-func GetSnapshot(db *sqlx.DB) (*Snapshot, error) {
+// GetSchema returns a schema of the current database.
+func GetSchema(db *sqlx.DB) (*Schema, error) {
 	tbls, err := getTables(db)
 	if err != nil {
 		return nil, err
@@ -227,7 +229,7 @@ func GetSnapshot(db *sqlx.DB) (*Snapshot, error) {
 		return nil, err
 	}
 
-	return &Snapshot{
+	return &Schema{
 		Tables:     tbls,
 		Procedures: procs,
 	}, nil
@@ -268,4 +270,140 @@ func getProcedures(db *sqlx.DB) ([]Procedure, error) {
 	}
 
 	return procs, nil
+}
+
+type Records struct {
+	Columns []string
+	Rows    []Row
+}
+
+type Row []any
+
+func (r Row) String() string {
+	if len(r) == 0 {
+		return "()"
+	}
+	b := []byte{'('}
+	for _, col := range r {
+		switch v := (*col.(*any)).(type) {
+		case int, int8, int16, int32, int64,
+			uint, uint8, uint16, uint32, uint64,
+			float32, float64:
+			b = fmt.Appendf(b, "%v, ", v)
+		case time.Time:
+			b = v.AppendFormat(b, "'2006-01-02 15:04:05', ")
+		default:
+			b = append(b, []byte(quotedValue(v))...)
+			b = append(b, ',', ' ')
+		}
+	}
+	b[len(b)-2] = ')'
+	return string(b[:len(b)-1])
+}
+
+func quotedValue(v any) string {
+	s := fmt.Sprintf("%v", v)
+	var b strings.Builder
+	b.Grow(len(s) + 2)
+
+	b.WriteByte('\'')
+	for _, c := range s {
+		switch c {
+		case 0:
+			b.WriteString("\\0")
+		case 26: // ^Z, SUB
+			b.WriteString("\\Z")
+		case '\b':
+			b.WriteString("\\b")
+		case '\n':
+			b.WriteString("\\n")
+		case '\r':
+			b.WriteString("\\r")
+		case '\t':
+			b.WriteString("\\t")
+		case '\'', '\\', '%', '_':
+			b.WriteByte('\\')
+			b.WriteRune(c)
+		default:
+			b.WriteRune(c)
+		}
+	}
+	b.WriteByte('\'')
+	return b.String()
+}
+
+func GetRecords(db *sqlx.DB, table string) (*Records, error) {
+	rows, err := db.Query(fmt.Sprintf("SELECT * FROM `%s`", table))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	rec := Records{
+		Columns: cols,
+	}
+
+	for rows.Next() {
+		row := make([]any, len(cols))
+		for i := range len(cols) {
+			row[i] = new(any)
+		}
+		if err := rows.Scan(row...); err != nil {
+			return nil, err
+		}
+		rec.Rows = append(rec.Rows, row)
+	}
+
+	return &rec, nil
+}
+
+func Dump(w io.Writer, db *sqlx.DB) error {
+	schema, err := GetSchema(db)
+	if err != nil {
+		return err
+	}
+
+	// tables
+	for _, t := range schema.Tables {
+		w.Write([]byte(t.Create))
+		w.Write([]byte(";\n\n"))
+
+		rec, err := GetRecords(db, t.Name)
+		if err != nil {
+			return err
+		}
+		if len(rec.Rows) == 0 {
+			break
+		}
+
+		for i, r := range rec.Rows {
+			if i%10 == 0 {
+				fmt.Fprintf(w, "INSERT INTO `%v` (`%v`) VALUES\n  ", t.Name, strings.Join(rec.Columns, "`,`"))
+			}
+
+			w.Write([]byte(r.String()))
+
+			if i%10 == 10-1 || i == len(rec.Rows)-1 {
+				w.Write([]byte(";\n"))
+			} else {
+				w.Write([]byte(", "))
+			}
+		}
+		w.Write([]byte("\n"))
+	}
+
+	// stored procedures
+	w.Write([]byte("DELIMITER //\n\n"))
+	for _, p := range schema.Procedures {
+		w.Write([]byte(p.Create))
+		w.Write([]byte("//\n\n"))
+	}
+	w.Write([]byte("DELIMITER ;\n"))
+
+	return nil
 }
