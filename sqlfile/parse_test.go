@@ -1,13 +1,7 @@
-package main
+package sqlfile
 
 import (
-	"bytes"
-	"os"
 	"testing"
-
-	"github.com/google/go-cmp/cmp"
-	"github.com/jmoiron/sqlx"
-	"github.com/makiuchi-d/testdb"
 )
 
 var testSQL = []byte(`-- test SQL
@@ -54,16 +48,6 @@ INSERT INTO users (id, name) VALUES (1, 'alice'), (2, 'bob'), (3, 'carol');
 
 -- end of file
 `)
-
-func prepareTestDb(t *testing.T) *sqlx.DB {
-	db := sqlx.NewDb(testdb.New("db"), "mysql")
-	for s := range ParseSQL(testSQL) {
-		if _, err := db.Exec(s); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return db
-}
 
 func TestSkipSpaces(t *testing.T) {
 	tests := map[string]struct {
@@ -210,7 +194,7 @@ func TestChangeDelimiter(t *testing.T) {
 	}
 }
 
-func TestParseSQL(t *testing.T) {
+func TestParse(t *testing.T) {
 	exp := []string{
 		`CREATE TABLE _migrations (
    id      INTEGER NOT NULL,
@@ -236,7 +220,7 @@ END `,
 	}
 
 	n := 0
-	for stmt := range ParseSQL(testSQL) {
+	for stmt := range Parse(testSQL) {
 		t.Logf("stmt[%v]\n%v\n", n, stmt)
 		if n >= len(exp) {
 			t.Fatalf("unexpected: %v", stmt)
@@ -249,89 +233,5 @@ END `,
 	}
 	if n != len(exp) {
 		t.Fatalf("not parsed: %v", exp[n:])
-	}
-}
-
-func TestGetTables(t *testing.T) {
-	db := prepareTestDb(t)
-
-	tbls, err := getTables(db)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	exp := []Table{
-		{
-			Name: "_migrations",
-			Create: "" +
-				"CREATE TABLE `_migrations` (\n" +
-				"  `id` int NOT NULL,\n" +
-				"  `applied` datetime,\n" +
-				"  `title` varchar(255),\n" +
-				"  PRIMARY KEY (`id`)\n" +
-				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin",
-		},
-		{
-			Name: "users",
-			Create: "" +
-				"CREATE TABLE `users` (\n" +
-				"  `id` int NOT NULL,\n" +
-				"  `name` varchar(255) NOT NULL,\n" +
-				"  PRIMARY KEY (`id`)\n" +
-				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin",
-		},
-	}
-
-	if diff := cmp.Diff(tbls, exp); diff != "" {
-		t.Fatal(diff)
-	}
-}
-
-func TestGetProcedures(t *testing.T) {
-	db := prepareTestDb(t)
-
-	procs, err := getProcedures(db)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	exp := []Procedure{
-		{
-			Name: "_migration_exists",
-			Create: "" +
-				"CREATE PROCEDURE _migration_exists(IN input_id INTEGER)\n" +
-				"BEGIN\n" +
-				"    IF NOT EXISTS (SELECT 1 FROM _migrations WHERE id = input_id) THEN\n" +
-				"        SIGNAL SQLSTATE '45000'\n" +
-				"            SET MESSAGE_TEXT = 'migration not found';\n" +
-				"    END IF;\n" +
-				"END",
-			Charset:     "utf8mb4",
-			Collation:   "utf8mb4_0900_bin",
-			DBCollation: "utf8mb4_0900_bin",
-		},
-	}
-
-	if diff := cmp.Diff(procs, exp); diff != "" {
-		t.Fatal(diff)
-	}
-}
-
-func TestDump(t *testing.T) {
-	exp, err := os.ReadFile("testdata/dump/golden.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	db := prepareTestDb(t)
-	buf := bytes.NewBuffer(nil)
-
-	err = Dump(buf, db)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if diff := cmp.Diff(buf.String(), string(exp)); diff != "" {
-		t.Fatal(diff)
 	}
 }
