@@ -8,6 +8,9 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/makiuchi-d/testdb"
 	"github.com/spf13/cobra"
+
+	"github.com/makiuchi-d/migy/migrations"
+	"github.com/makiuchi-d/migy/sqlfile"
 )
 
 var (
@@ -19,7 +22,7 @@ var cmdSnapshot = &cobra.Command{
 	Use:   "snapshot",
 	Short: "Generate a SQL snapshot at the specified migration point",
 	Long: `Applies up migrations sequentially and generates a SQL file
- that reproduces the database state at that point.`,
+that reproduces the database state at that point.`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return snapshotToSQLFile(targetDir, snapshotNumber, snapshotOverwrite)
@@ -34,7 +37,7 @@ func init() {
 
 func snapshotToSQLFile(dir string, num int, overwrite bool) error {
 
-	migs, err := GetMigrations(dir)
+	migs, err := migrations.Load(dir)
 	if err != nil {
 		return err
 	}
@@ -43,12 +46,20 @@ func snapshotToSQLFile(dir string, num int, overwrite bool) error {
 		num = migs[len(migs)-1].Number
 	}
 
-	migs = migs.FromSnapshotTo(num)
-	if len(migs) == 0 {
-		return fmt.Errorf("no migrations (number: %06d)", num)
+	migs, err = migs.FromSnapshotTo(num)
+	if err != nil {
+		return err
+	}
+	if !migs[0].Snapshot {
+		warning("no snapshot (*.all.sql)")
 	}
 
-	db := testdb.New("db")
+	last := migs[len(migs)-1]
+	if last.Snapshot && !overwrite {
+		return fmt.Errorf("file exists: %s", filepath.Join(dir, last.SnapshotName()))
+	}
+
+	db := sqlx.NewDb(testdb.New("db"), "mysql")
 
 	fmt.Println("applying...")
 
@@ -59,24 +70,19 @@ func snapshotToSQLFile(dir string, num int, overwrite bool) error {
 		}
 
 		fmt.Println(name)
-		err := applySQLFile(db, filepath.Join(dir, name))
+		err := sqlfile.Apply(db, filepath.Join(dir, name))
 		if err != nil {
 			return err
 		}
 	}
 
-	last := migs[len(migs)-1]
-	last.Snapshot = true
 	fmt.Println("======\nwriting:", last.SnapshotName())
 	flag := os.O_CREATE | os.O_RDWR
-	if !overwrite {
-		flag |= os.O_EXCL
-	}
 	f, err := os.OpenFile(filepath.Join(dir, last.SnapshotName()), flag, 0666)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	return Dump(f, sqlx.NewDb(db, "mysql"))
+	return sqlfile.Dump(f, db)
 }

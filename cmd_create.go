@@ -8,6 +8,8 @@ import (
 	"text/template"
 
 	"github.com/spf13/cobra"
+
+	"github.com/makiuchi-d/migy/migrations"
 )
 
 var createNumber int
@@ -47,7 +49,7 @@ DELETE FROM _migrations WHERE id = {{.Number}};
 )
 
 func createNewMigrationFiles(dir string, num int, title string) error {
-	migs, err := GetMigrations(dir)
+	migs, err := migrations.Load(dir)
 	if err != nil {
 		return err
 	}
@@ -66,10 +68,9 @@ func createNewMigrationFiles(dir string, num int, title string) error {
 		}
 	}
 
-	mig := Migration{
+	mig := migrations.Migration{
 		Number: num,
 		Title:  title,
-		UpDown: true,
 	}
 
 	err = generateMigrationSQLFile(dir, mig.UpName(), createUpSQL, mig)
@@ -85,7 +86,7 @@ func createNewMigrationFiles(dir string, num int, title string) error {
 	return nil
 }
 
-func generateMigrationSQLFile(dir, name, tmpl string, mig Migration) error {
+func generateMigrationSQLFile(dir, name, tmpl string, mig migrations.Migration) error {
 	f, err := os.OpenFile(filepath.Join(dir, name), os.O_CREATE|os.O_RDWR|os.O_EXCL, 0666)
 	if err != nil {
 		return err
