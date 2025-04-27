@@ -6,7 +6,19 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/jmoiron/sqlx"
+	"github.com/makiuchi-d/testdb"
 )
+
+func prepareTestDb(t *testing.T) *sqlx.DB {
+	db := sqlx.NewDb(testdb.New("db"), "mysql")
+	for s := range Parse(testSQL) {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return db
+}
 
 func TestDump(t *testing.T) {
 	exp, err := os.ReadFile("testdata/dump/golden.sql")

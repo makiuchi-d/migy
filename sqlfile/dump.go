@@ -6,10 +6,12 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx"
+
+	"github.com/makiuchi-d/migy/dbstate"
 )
 
 func Dump(w io.Writer, db *sqlx.DB) error {
-	schema, err := GetSchema(db)
+	schema, err := dbstate.GetSchema(db)
 	if err != nil {
 		return err
 	}
@@ -19,7 +21,7 @@ func Dump(w io.Writer, db *sqlx.DB) error {
 		w.Write([]byte(t.Create))
 		w.Write([]byte(";\n\n"))
 
-		rec, err := GetRecords(db, t.Name)
+		rec, err := dbstate.GetRecords(db, t.Name)
 		if err != nil {
 			return err
 		}

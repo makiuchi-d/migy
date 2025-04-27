@@ -1,4 +1,4 @@
-package sqlfile
+package dbstate
 
 import (
 	"fmt"
@@ -31,11 +31,11 @@ type Procedure struct {
 
 // GetSchema returns a schema of the current database.
 func GetSchema(db *sqlx.DB) (*Schema, error) {
-	tbls, err := getTables(db)
+	tbls, err := GetTables(db)
 	if err != nil {
 		return nil, err
 	}
-	procs, err := getProcedures(db)
+	procs, err := GetProcedures(db)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func GetSchema(db *sqlx.DB) (*Schema, error) {
 	}, nil
 }
 
-func getTables(db *sqlx.DB) ([]Table, error) {
+func GetTables(db *sqlx.DB) ([]Table, error) {
 	var nms []string
 	if err := db.Select(&nms, "SHOW TABLES"); err != nil {
 		return nil, err
@@ -63,7 +63,7 @@ func getTables(db *sqlx.DB) ([]Table, error) {
 	return tbls, nil
 }
 
-func getProcedures(db *sqlx.DB) ([]Procedure, error) {
+func GetProcedures(db *sqlx.DB) ([]Procedure, error) {
 	// Note: go-mysql-server does not currently support "SHOW PROCEDURE STATUS" or "information_schema.routines".
 	// This function returns only the required stored procedures.
 	// Update this implementation if support is added in the future.
