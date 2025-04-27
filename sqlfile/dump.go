@@ -11,13 +11,12 @@ import (
 )
 
 func Dump(w io.Writer, db *sqlx.DB) error {
-	schema, err := dbstate.GetSchema(db)
+	// tables
+	tbls, err := dbstate.GetTables(db)
 	if err != nil {
 		return err
 	}
-
-	// tables
-	for _, t := range schema.Tables {
+	for _, t := range tbls {
 		w.Write([]byte(t.Create))
 		w.Write([]byte(";\n\n"))
 
@@ -46,8 +45,12 @@ func Dump(w io.Writer, db *sqlx.DB) error {
 	}
 
 	// stored procedures
+	procs, err := dbstate.GetProcedures(db)
+	if err != nil {
+		return err
+	}
 	w.Write([]byte("DELIMITER //\n\n"))
-	for _, p := range schema.Procedures {
+	for _, p := range procs {
 		w.Write([]byte(p.Create))
 		w.Write([]byte("//\n\n"))
 	}

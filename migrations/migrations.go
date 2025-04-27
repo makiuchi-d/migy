@@ -3,6 +3,7 @@ package migrations
 import (
 	"errors"
 	"fmt"
+	"iter"
 	"regexp"
 )
 
@@ -41,31 +42,68 @@ func (m *Migration) SnapshotName() string {
 	return fmt.Sprintf("%06d_%s.all.sql", m.Number, m.Title)
 }
 
+// FindNumber returns the index of the migration with the specified number
+func (migs Migrations) FindNumber(num int) (int, error) {
+	i := len(migs) - 1
+	for ; i >= 0; i-- {
+		if migs[i].Number == num {
+			return i, nil
+		}
+	}
+	return -1, fmt.Errorf("%w: number=%06d", ErrNoMigration, num)
+}
+
+// FindLatestSnapshot returns the index of the migration with snapshot
+func (migs Migrations) FindLatestSnapshot() int {
+	i := len(migs) - 1
+	for ; i >= 0; i-- {
+		if migs[i].Snapshot {
+			return i
+		}
+	}
+	return i
+}
+
 // FromSnapshot returns migrations from the latest snapshot to the latest migration
 func (migs Migrations) FromSnapshot() Migrations {
 	if len(migs) == 0 {
 		return migs //empty
 	}
-	migs, _ = migs.FromSnapshotTo(migs[len(migs)-1].Number)
-	return migs
+	i := migs.FindLatestSnapshot()
+	return migs[max(i, 0):]
 }
 
 // FromSnapshotTo returns migrations from the snapshot before the specified migration to the specified migration
 func (migs Migrations) FromSnapshotTo(num int) (Migrations, error) {
-	last := -1
-	for i := len(migs) - 1; i >= 0; i-- {
-		if migs[i].Number == num {
-			last = i
-			break
+	last, err := migs.FindNumber(num)
+	if err != nil {
+		return nil, err
+	}
+
+	start := migs[:last].FindLatestSnapshot()
+	return migs[max(start, 0) : last+1], nil
+}
+
+func (migs Migrations) ApplicableFileNames() iter.Seq[string] {
+	return func(yield func(string) bool) {
+		if len(migs) == 0 {
+			return
+		}
+		f := migs[0].SnapshotName()
+		if !migs[0].Snapshot {
+			f = migs[0].UpName()
+		}
+		if !yield(f) {
+			return
+		}
+
+		for _, mig := range migs[1:] {
+			if !mig.UpDown {
+				continue
+			}
+			if !yield(mig.UpName()) {
+				return
+			}
 		}
 	}
-	if last < 0 {
-		return nil, fmt.Errorf("%w: number=%06d", ErrNoMigration, num)
-	}
-	for i := last - 1; i >= 0; i-- {
-		if migs[i].Snapshot {
-			return migs[i : last+1], nil
-		}
-	}
-	return migs[:last+1], nil
 }

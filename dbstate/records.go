@@ -97,15 +97,3 @@ func GetRecords(db *sqlx.DB, table string) (*Records, error) {
 
 	return &rec, nil
 }
-
-func GetAllRecords(db *sqlx.DB, schema *Schema) (map[string]*Records, error) {
-	recs := make(map[string]*Records, len(schema.Tables))
-	for _, tbl := range schema.Tables {
-		rec, err := GetRecords(db, tbl.Name)
-		if err != nil {
-			return nil, fmt.Errorf("table %s: %w", tbl.Name, err)
-		}
-		recs[tbl.Name] = rec
-	}
-	return recs, nil
-}

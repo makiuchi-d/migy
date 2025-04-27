@@ -58,7 +58,7 @@ func TestGetTables(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	exp := []dbstate.Table{
+	exp := []*dbstate.Table{
 		{
 			Name: "_migrations",
 			Create: "" +
@@ -93,7 +93,7 @@ func TestGetProcedures(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	exp := []dbstate.Procedure{
+	exp := []*dbstate.Procedure{
 		{
 			Name: "_migration_exists",
 			Create: "" +

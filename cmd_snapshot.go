@@ -61,22 +61,14 @@ func snapshotToSQLFile(dir string, num int, overwrite bool) error {
 
 	db := sqlx.NewDb(testdb.New("db"), "mysql")
 
-	fmt.Println("applying...")
-
-	for i, m := range migs {
-		name := m.UpName()
-		if i == 0 && m.Snapshot {
-			name = m.SnapshotName()
-		}
-
-		fmt.Println(name)
-		err := sqlfile.Apply(db, filepath.Join(dir, name))
-		if err != nil {
+	for name := range migs.ApplicableFileNames() {
+		info("applying:", name)
+		if err := sqlfile.Apply(db, filepath.Join(dir, name)); err != nil {
 			return err
 		}
 	}
 
-	fmt.Println("======\nwriting:", last.SnapshotName())
+	info("========\nwriting:", last.SnapshotName())
 	flag := os.O_CREATE | os.O_RDWR
 	f, err := os.OpenFile(filepath.Join(dir, last.SnapshotName()), flag, 0666)
 	if err != nil {

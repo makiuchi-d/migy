@@ -17,10 +17,12 @@ var cmd = &cobra.Command{
 
 var (
 	targetDir string
+	quit      bool
 )
 
 func init() {
 	cmd.PersistentFlags().StringVarP(&targetDir, "dir", "d", ".", "directory with migration files")
+	cmd.PersistentFlags().BoolVarP(&quit, "quit", "q", false, "quit stdout")
 }
 
 func main() {
@@ -33,4 +35,11 @@ func main() {
 
 func warning(msg string) {
 	fmt.Fprintln(os.Stderr, "warning:", msg)
+}
+
+func info(a ...any) {
+	if quit {
+		return
+	}
+	fmt.Fprintln(os.Stdout, a...)
 }
