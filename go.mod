@@ -5,6 +5,7 @@ go 1.24.2
 require (
 	github.com/google/go-cmp v0.6.0
 	github.com/jmoiron/sqlx v1.4.0
+	github.com/makiuchi-d/anydiff v1.0.0
 	github.com/makiuchi-d/testdb v1.3.1
 	github.com/spf13/cobra v1.9.1
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0

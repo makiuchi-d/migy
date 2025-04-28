@@ -38,6 +38,8 @@ github.com/lestrrat-go/strftime v1.0.4 h1:T1Rb9EPkAhgxKqbcMIPguPq8glqXTA1koF8n9B
 github.com/lestrrat-go/strftime v1.0.4/go.mod h1:E1nN3pCbtMSu1yjSVeyuRFVm/U0xoR76fd03sz+Qz4g=
 github.com/lib/pq v1.10.9 h1:YXG7RB+JIjhP29X+OtkiDnYaXQwpS4JEWq7dtCCRUEw=
 github.com/lib/pq v1.10.9/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
+github.com/makiuchi-d/anydiff v1.0.0 h1:4OGgIevpoHWR3pzRyB5BMiaidNwLD35uL01Bqnas6Tg=
+github.com/makiuchi-d/anydiff v1.0.0/go.mod h1:3v4eRF+k/9j/idToletGp0teD5dPeeuaZvZ7FXwqu7k=
 github.com/makiuchi-d/testdb v1.3.1 h1:Dxgvy85mj+GL/xSsqlaalirdqhK7FBcuCwJoAHN4/U0=
 github.com/makiuchi-d/testdb v1.3.1/go.mod h1:XYs7HMlanDmur2WeGI9urS0liVZNeVf1uiseyIroLhc=
 github.com/mattn/go-sqlite3 v1.14.22 h1:2gZY6PC6kBnID23Tichd1K+Z0oS6nE/XwU+Vz/5o4kU=

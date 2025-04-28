@@ -7,9 +7,9 @@ import (
 )
 
 type Snapshot struct {
-	Tables     []*Table
-	AllRecords map[string]*Records
-	Procedures []*Procedure
+	Tables     map[string]*Table
+	Records    map[string]*Records
+	Procedures map[string]*Procedure
 }
 
 func TakeSnapshot(db *sqlx.DB) (*Snapshot, error) {
@@ -17,30 +17,31 @@ func TakeSnapshot(db *sqlx.DB) (*Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	recs, err := getAllRecords(db, tbls)
-	if err != nil {
-		return nil, err
+	tblmap := make(map[string]*Table, len(tbls))
+	recmap := make(map[string]*Records, len(tbls))
+	for i := range tbls {
+		n := tbls[i].Name
+		tblmap[n] = tbls[i]
+		rec, err := GetRecords(db, n)
+		if err != nil {
+			return nil, fmt.Errorf("table %s: %w", n, err)
+		}
+		recmap[n] = rec
 	}
+
 	procs, err := GetProcedures(db)
 	if err != nil {
 		return nil, err
 	}
+	procmap := make(map[string]*Procedure)
+	for i := range procs {
+		n := procs[i].Name
+		procmap[n] = procs[i]
+	}
 
 	return &Snapshot{
-		Tables:     tbls,
-		AllRecords: recs,
-		Procedures: procs,
+		Tables:     tblmap,
+		Records:    recmap,
+		Procedures: procmap,
 	}, nil
-}
-
-func getAllRecords(db *sqlx.DB, tbls []*Table) (map[string]*Records, error) {
-	recs := make(map[string]*Records, len(tbls))
-	for _, tbl := range tbls {
-		rec, err := GetRecords(db, tbl.Name)
-		if err != nil {
-			return nil, fmt.Errorf("table %s: %w", tbl.Name, err)
-		}
-		recs[tbl.Name] = rec
-	}
-	return recs, nil
 }

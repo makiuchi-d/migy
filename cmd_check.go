@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 
@@ -69,6 +70,9 @@ func checkMigrationPair(dir string, num int) error {
 	// snapshot
 	info("======== taking a snapshot")
 	ss, err := dbstate.TakeSnapshot(db)
+	if err != nil {
+		return err
+	}
 
 	info("applying:", mig.UpName())
 	if err := sqlfile.Apply(db, filepath.Join(dir, mig.UpName())); err != nil {
@@ -83,7 +87,17 @@ func checkMigrationPair(dir string, num int) error {
 	// check with snapshot
 	info("======== checking")
 
-	_ = ss
+	diff, err := dbstate.Diff(db, ss)
+	if err != nil {
+		return err
+	}
 
+	if diff != "" {
+		info(diff) //strings.TrimSuffix(diff, "\n"))
+		info("check failed")
+		os.Exit(1)
+	}
+
+	info("ok")
 	return nil
 }
