@@ -3,16 +3,17 @@ package dbstate
 import (
 	"fmt"
 	"iter"
+	"slices"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/makiuchi-d/anydiff"
 )
 
-func Diff(db *sqlx.DB, ss *Snapshot) (string, error) {
+func Diff(db *sqlx.DB, ss *Snapshot, ignores map[string][]string) (string, error) {
 	var sb strings.Builder
 
-	if err := diffTables(&sb, db, ss); err != nil {
+	if err := diffTables(&sb, db, ss, ignores); err != nil {
 		return "", err
 	}
 	if err := diffProcedures(&sb, db, ss); err != nil {
@@ -22,7 +23,7 @@ func Diff(db *sqlx.DB, ss *Snapshot) (string, error) {
 	return sb.String(), nil
 }
 
-func diffTables(sb *strings.Builder, db *sqlx.DB, ss *Snapshot) error {
+func diffTables(sb *strings.Builder, db *sqlx.DB, ss *Snapshot, ignores map[string][]string) error {
 
 	tbls, err := GetTables(db)
 	if err != nil {
@@ -47,7 +48,10 @@ func diffTables(sb *strings.Builder, db *sqlx.DB, ss *Snapshot) error {
 			continue
 		}
 
-		// todo: diffRecords
+		err = diffRecords(sb, db, ss, tbl.Name, ignores)
+		if err != nil {
+			return err
+		}
 	}
 	for name := range ss.Tables {
 		if _, ok := checked[name]; !ok {
@@ -55,6 +59,42 @@ func diffTables(sb *strings.Builder, db *sqlx.DB, ss *Snapshot) error {
 		}
 	}
 
+	return nil
+}
+
+func diffRecords(sb *strings.Builder, db *sqlx.DB, ss *Snapshot, table string, ignores map[string][]string) error {
+	ign := ignores[table]
+	if slices.Contains(ign, "*") {
+		// ignore all column differences
+		return nil
+	}
+	before := ss.Records[table]
+	after, err := GetRecords(db, table)
+	if err != nil {
+		return err
+	}
+
+	cmp := func(a, b *Row) bool {
+		for i := range len(*a) {
+			if slices.Contains(ign, after.Columns[i]) {
+				continue
+			}
+			ai := (*a)[i].(*any)
+			bi := (*b)[i].(*any)
+			if *ai != *bi {
+				return false
+			}
+		}
+		return true
+	}
+
+	edit := anydiff.Diff(before.Rows, after.Rows, cmp)
+	if edit.Distance() == 0 {
+		return nil
+	}
+
+	fmt.Fprintf(sb, "records in %q differs:\n", table)
+	diffString(sb, edit, before.Rows, after.Rows)
 	return nil
 }
 

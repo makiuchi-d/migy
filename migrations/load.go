@@ -3,14 +3,22 @@ package migrations
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 
 	"golang.org/x/exp/maps"
 )
 
+var (
+	reFilenname = regexp.MustCompile(`^([0-9]+)_(.*)\.(up|down|all)\.sql$`)
+	reIgnore    = regexp.MustCompile(`\smigy:ignore\s+(.*)+?(?:\n|$)`)
+)
+
 func parseSQLFileName(name string) (num int, title, kind string, ok bool) {
-	m := namePattern.FindStringSubmatch(name)
+	m := reFilenname.FindStringSubmatch(name)
 	if len(m) != 4 {
 		return 0, "", "", false
 	}
@@ -71,9 +79,9 @@ func Load(dir string) (Migrations, error) {
 	for i, num := range keys {
 		m := mm[num]
 
-		_, up := m.kinds["up"]
-		_, down := m.kinds["down"]
 		_, all := m.kinds["all"]
+		_, up := m.kinds["up"]
+		downname, down := m.kinds["down"]
 
 		if !up && down {
 			return nil, fmt.Errorf("%w up.sql: %06d", ErrMissingFile, num)
@@ -82,13 +90,43 @@ func Load(dir string) (Migrations, error) {
 			return nil, fmt.Errorf("%w down.sql: %06d", ErrMissingFile, num)
 		}
 
+		ignores := make(map[string][]string)
+		if down {
+			err := readIgnores(ignores, filepath.Join(dir, downname))
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		migs[i] = &Migration{
 			Number:   num,
 			Title:    m.title,
 			UpDown:   up,
 			Snapshot: all,
+			Ignores:  ignores,
 		}
 	}
 
 	return migs, nil
+}
+
+func readIgnores(igs map[string][]string, name string) error {
+	file, err := os.ReadFile(name)
+	if err != nil {
+		return err
+	}
+
+	m := reIgnore.FindAllStringSubmatch(string(file), -1)
+
+	for _, s := range m {
+		for ss := range strings.FieldsSeq(s[1]) {
+			tc := strings.Split(strings.TrimSuffix(ss, ","), ".")
+			if len(tc) != 2 {
+				return fmt.Errorf("invalid format: %v", s[0])
+			}
+			igs[tc[0]] = append(igs[tc[0]], tc[1])
+		}
+	}
+
+	return nil
 }

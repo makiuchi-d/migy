@@ -69,7 +69,7 @@ func snapshotToSQLFile(dir string, num int, overwrite bool) error {
 	}
 
 	info("========\nwriting:", last.SnapshotName())
-	flag := os.O_CREATE | os.O_RDWR
+	flag := os.O_CREATE | os.O_RDWR | os.O_TRUNC
 	f, err := os.OpenFile(filepath.Join(dir, last.SnapshotName()), flag, 0666)
 	if err != nil {
 		return err

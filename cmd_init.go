@@ -51,7 +51,7 @@ DELIMITER ;
 
 func generateInitSQLFile(dir string, overwrite bool) error {
 	path := filepath.Join(dir, initFile)
-	flag := os.O_CREATE | os.O_RDWR
+	flag := os.O_CREATE | os.O_RDWR | os.O_TRUNC
 	if !overwrite {
 		flag |= os.O_EXCL
 	}

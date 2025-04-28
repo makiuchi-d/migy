@@ -49,6 +49,9 @@ CREATE TABLE table3 (
     PRIMARY KEY (id)
 )`,
 		}
+		ignores = map[string][]string{
+			"users": {"age"},
+		}
 	)
 
 	db := sqlx.NewDb(testdb.New("db"), "myseql")
@@ -71,7 +74,7 @@ CREATE TABLE table3 (
 	}
 
 	var sb strings.Builder
-	err = diffTables(&sb, db, ss)
+	err = diffTables(&sb, db, ss, ignores)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,6 +87,10 @@ CREATE TABLE table3 (
 		"   PRIMARY KEY (`id`)\n" +
 		"...\n" +
 		"unexpected \"table3\" table found\n" +
+		"records in \"users\" differs:\n" +
+		" (1, 'alice', 30)\n" +
+		"-(2, 'bob', 24)\n" +
+		" (3, 'carol', 28)\n" +
 		"missing \"table2\" table\n"
 
 	diff := sb.String()

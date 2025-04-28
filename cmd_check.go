@@ -87,7 +87,7 @@ func checkMigrationPair(dir string, num int) error {
 	// check with snapshot
 	info("======== checking")
 
-	diff, err := dbstate.Diff(db, ss)
+	diff, err := dbstate.Diff(db, ss, mig.Ignores)
 	if err != nil {
 		return err
 	}

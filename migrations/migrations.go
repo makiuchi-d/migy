@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"iter"
-	"regexp"
 )
 
 var (
@@ -12,8 +11,6 @@ var (
 	ErrDuplicateNumber = errors.New("duplicate number")
 	ErrMissingFile     = errors.New("missing")
 	ErrTitleMismatch   = errors.New("title mismatch")
-
-	namePattern *regexp.Regexp = regexp.MustCompile(`^([0-9]+)_(.*)\.(up|down|all)\.sql$`)
 )
 
 // Migration SQL file info
@@ -22,6 +19,7 @@ type Migration struct {
 	Title    string
 	UpDown   bool
 	Snapshot bool
+	Ignores  map[string][]string
 }
 
 // Migration list

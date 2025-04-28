@@ -1,0 +1,1 @@
+-- migy:ignore mytable.ignore1 mytable.ignore2
