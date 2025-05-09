@@ -11,6 +11,7 @@ var (
 	ErrDuplicateNumber = errors.New("duplicate number")
 	ErrMissingFile     = errors.New("missing")
 	ErrTitleMismatch   = errors.New("title mismatch")
+	ErrInvalidFormat   = errors.New("invalid format")
 )
 
 // Migration SQL file info

@@ -94,7 +94,7 @@ func Load(dir string) (Migrations, error) {
 		if down {
 			err := readIgnores(ignores, filepath.Join(dir, downname))
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("%v: %w", downname, err)
 			}
 		}
 
@@ -122,7 +122,7 @@ func readIgnores(igs map[string][]string, name string) error {
 		for ss := range strings.FieldsSeq(s[1]) {
 			tc := strings.Split(strings.TrimSuffix(ss, ","), ".")
 			if len(tc) != 2 {
-				return fmt.Errorf("invalid format: %v", s[0])
+				return fmt.Errorf("%w: %v", ErrInvalidFormat, s[0])
 			}
 			igs[tc[0]] = append(igs[tc[0]], tc[1])
 		}

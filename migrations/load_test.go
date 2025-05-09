@@ -61,6 +61,7 @@ func TestLoadFail(t *testing.T) {
 		"mismatch":    ErrTitleMismatch,
 		"upmissing":   ErrMissingFile,
 		"downmissing": ErrMissingFile,
+		"invalidform": ErrInvalidFormat,
 	}
 	for dir, exp := range tests {
 		t.Run(dir, func(t *testing.T) {

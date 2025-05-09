@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/makiuchi-d/testdb"
@@ -93,8 +94,7 @@ func checkMigrationPair(dir string, num int) error {
 	}
 
 	if diff != "" {
-		info(diff) //strings.TrimSuffix(diff, "\n"))
-		info("check failed")
+		info(strings.TrimSuffix(diff, "\n"), "check failed")
 		os.Exit(1)
 	}
 
