@@ -37,6 +37,7 @@ Available Commands:
   help        Help about any command
   init        Generate the initial migration SQL file
   snapshot    Generate a SQL snapshot at the specified migration point
+  version     Show version
 
 Flags:
   -d, --dir string   directory with migration files (default ".")
