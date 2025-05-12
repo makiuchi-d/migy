@@ -17,11 +17,11 @@ go install github.com/makiuchi-d/migy@latest
 
 migy manages SQL migrations for MySQL with a focus on file-based workflows and SQL consistency.
 
-- `init` generates an initial SQL file for the database schema.
-- `create` generates a new pair of up/down migration files.
-- Edit the generated SQL files manually as needed.
-- `check` verifies that a pair of up/down migrations are reversible.
-- `snapshot` creates a SQL snapshot representing the database state at a specific migration point.
+1. `init` generates an initial SQL file for the database schema.
+2. `create` generates a new pair of up/down migration files.
+3. Edit the generated SQL files manually as needed.
+4. `check` verifies that a pair of up/down migrations are reversible.
+5. `snapshot` creates a SQL snapshot representing the database state at a specific migration point.
 
 ```shell
 $ migy --help
@@ -37,6 +37,7 @@ Available Commands:
   help        Help about any command
   init        Generate the initial migration SQL file
   snapshot    Generate a SQL snapshot at the specified migration point
+  status      Show the status of each migration
   version     Show version
 
 Flags:

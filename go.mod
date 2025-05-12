@@ -3,6 +3,7 @@ module github.com/makiuchi-d/migy
 go 1.24.2
 
 require (
+	github.com/go-sql-driver/mysql v1.8.1
 	github.com/google/go-cmp v0.6.0
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/makiuchi-d/anydiff v1.0.0
@@ -12,6 +13,7 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/dolthub/flatbuffers/v23 v23.3.3-dh.2 // indirect
 	github.com/dolthub/go-icu-regex v0.0.0-20241215010122-db690dd53c90 // indirect
