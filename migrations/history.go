@@ -2,14 +2,9 @@ package migrations
 
 import (
 	"iter"
-	"strings"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
-	"github.com/makiuchi-d/testdb"
-
-	"github.com/makiuchi-d/migy/sqlfile"
 )
 
 type Status struct {
@@ -28,34 +23,11 @@ type History struct {
 	Title   string    `db:"title"`
 }
 
-func load(db *sqlx.DB) ([]History, error) {
+func LoadHistories(db *sqlx.DB) ([]History, error) {
 	const sql = "SELECT id, applied, title FROM _migrations ORDER BY id"
 	var recs []History
 	err := db.Select(&recs, sql)
 	return recs, err
-}
-
-func HistoriesFromDump(file string) ([]History, error) {
-	db := sqlx.NewDb(testdb.New("db"), "mysql")
-	if err := sqlfile.Apply(db, file); err != nil {
-		return nil, err
-	}
-	return load(db)
-}
-
-func HistoriesFromDb(dsn string) ([]History, error) {
-	if !strings.Contains(dsn, "parseTime=true") {
-		if strings.Contains(dsn, "?") {
-			dsn += "&parseTime=true"
-		} else {
-			dsn += "?parseTime=true"
-		}
-	}
-	db, err := sqlx.Open("mysql", dsn)
-	if err != nil {
-		return nil, err
-	}
-	return load(db)
 }
 
 func BuildStatus(migs Migrations, hists []History) iter.Seq[Status] {

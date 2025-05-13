@@ -106,3 +106,23 @@ func (migs Migrations) ApplicableFileNames() iter.Seq[string] {
 		}
 	}
 }
+
+func (migs Migrations) ApplicableFileNamesAfter(n int) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		i := len(migs) - 1
+		for ; i >= 0; i-- {
+			if migs[i].Number <= n {
+				break
+			}
+		}
+		i++
+		for ; i < len(migs); i++ {
+			if !migs[i].UpDown {
+				continue
+			}
+			if !yield(migs[i].UpName()) {
+				return
+			}
+		}
+	}
+}

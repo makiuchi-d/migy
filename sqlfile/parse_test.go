@@ -31,10 +31,10 @@ DELIMITER // -- make delimiter "//"
 
 CREATE PROCEDURE _migration_exists(IN input_id INTEGER)
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM _migrations WHERE id = input_id) THEN
-        SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = 'migration not found';
-    END IF;
+  IF NOT EXISTS (SELECT 1 FROM _migrations WHERE id = input_id) THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'migration not found';
+  END IF;
 END //
 
 \d; --/* return to default delimiter ';'
@@ -209,10 +209,10 @@ func TestParse(t *testing.T) {
 )`,
 		`CREATE PROCEDURE _migration_exists(IN input_id INTEGER)
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM _migrations WHERE id = input_id) THEN
-        SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = 'migration not found';
-    END IF;
+  IF NOT EXISTS (SELECT 1 FROM _migrations WHERE id = input_id) THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'migration not found';
+  END IF;
 END `,
 
 		`INSERT INTO _migrations (id, applied, title) VALUES (1, '2025-04-19 00:33:32', 'first')`,

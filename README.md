@@ -22,6 +22,18 @@ migy manages SQL migrations for MySQL with a focus on file-based workflows and S
 3. Edit the generated SQL files manually as needed.
 4. `check` verifies that a pair of up/down migrations are reversible.
 5. `snapshot` creates a SQL snapshot representing the database state at a specific migration point.
+6. `status` shows the applied/unapplied status of each migration.
+7. `list` prints the paths of unapplied migration files in order.
+
+You can use `list` together with `mysql` cli to apply pending migrations:
+
+```bash
+mysqldump dbname _migrations > dump.sql
+
+migy list dump.sql | while read file; do
+  mysql -hlocalhost -uuser -ppass dbname < "$file"
+done
+```
 
 ```shell
 $ migy --help
@@ -36,6 +48,7 @@ Available Commands:
   create      Create a new pair of up/down SQL migration files
   help        Help about any command
   init        Generate the initial migration SQL file
+  list        List unapplied migration files
   snapshot    Generate a SQL snapshot at the specified migration point
   status      Show the status of each migration
   version     Show version

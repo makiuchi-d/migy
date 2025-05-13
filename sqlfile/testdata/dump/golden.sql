@@ -21,10 +21,10 @@ DELIMITER //
 
 CREATE PROCEDURE _migration_exists(IN input_id INTEGER)
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM _migrations WHERE id = input_id) THEN
-        SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = 'migration not found';
-    END IF;
+  IF NOT EXISTS (SELECT 1 FROM _migrations WHERE id = input_id) THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'migration not found';
+  END IF;
 END//
 
 DELIMITER ;

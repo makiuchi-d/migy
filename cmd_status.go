@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cobra"
 
 	"github.com/makiuchi-d/migy/migrations"
@@ -22,13 +22,13 @@ and summarizes their current status.`,
 		if len(args) < 1 {
 			return fmt.Errorf("missing dsn or dumpfile")
 		}
-		/*
-			var dsn, dump string
-			if filepath.Ext(args[0]) == "sql" {
-				dsn = args[0]
-			}*/
 
-		return showStatus(args[0])
+		db, err := openDsnOrDumpfile(args[0])
+		if err != nil {
+			return err
+		}
+
+		return showStatus(db, targetDir)
 	},
 }
 
@@ -37,19 +37,13 @@ func init() {
 	cmdStatus.Flags().BoolVarP(&statusCheck, "check", "c", false, "check migration reversibility")
 }
 
-func showStatus(dsnOrDump string) error {
-	var hists []migrations.History
-	var err error
-	if filepath.Ext(dsnOrDump) == ".sql" {
-		hists, err = migrations.HistoriesFromDump(dsnOrDump)
-	} else {
-		hists, err = migrations.HistoriesFromDb(dsnOrDump)
-	}
+func showStatus(db *sqlx.DB, dir string) error {
+	hists, err := migrations.LoadHistories(db)
 	if err != nil {
 		return err
 	}
 
-	migs, err := migrations.Load(targetDir)
+	migs, err := migrations.Load(dir)
 	if err != nil {
 		return err
 	}

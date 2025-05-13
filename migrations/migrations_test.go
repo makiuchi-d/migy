@@ -123,3 +123,34 @@ func TestApplicableFileNames(t *testing.T) {
 		t.Fatal(diff)
 	}
 }
+
+func TestApplicableFileNamesAfter(t *testing.T) {
+	migs := Migrations{
+		{Number: 0, Title: "init", Snapshot: true},
+		{Number: 10, Title: "first", UpDown: true, Snapshot: false},
+		{Number: 20, Title: "second", UpDown: true, Snapshot: true},
+		{Number: 30, Title: "third", UpDown: false, Snapshot: true},
+		{Number: 40, Title: "fourth", UpDown: true, Snapshot: false},
+	}
+	exp := []string{
+		"000020_second.up.sql",
+		"000040_fourth.up.sql",
+	}
+
+	var names []string
+	for n := range migs.ApplicableFileNamesAfter(19) {
+		names = append(names, n)
+	}
+	if diff := cmp.Diff(names, exp); diff != "" {
+		t.Fatal(diff)
+	}
+
+	exp = exp[1:]
+	names = names[:0]
+	for n := range migs.ApplicableFileNamesAfter(20) {
+		names = append(names, n)
+	}
+	if diff := cmp.Diff(names, exp); diff != "" {
+		t.Fatal(diff)
+	}
+}

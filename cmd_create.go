@@ -12,8 +12,6 @@ import (
 	"github.com/makiuchi-d/migy/migrations"
 )
 
-var createNumber int
-
 // cmdCreate represents the create command
 var cmdCreate = &cobra.Command{
 	Use:   "create [flags] <title>",
@@ -26,13 +24,13 @@ the corresponding rollback, ensuring changes can be reversed.`,
 		if len(args) == 0 {
 			return errors.New("need title")
 		}
-		return createNewMigrationFiles(targetDir, createNumber, args[0])
+		return createNewMigrationFiles(targetDir, migNumber, args[0])
 	},
 }
 
 func init() {
 	cmd.AddCommand(cmdCreate)
-	cmdCreate.Flags().IntVarP(&createNumber, "number", "n", 0, "migration number")
+	cmdCreate.Flags().IntVarP(&migNumber, "number", "n", 0, "migration number")
 }
 
 const (

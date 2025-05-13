@@ -1,9 +1,14 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
+	"github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
+	"github.com/makiuchi-d/migy/sqlfile"
+	"github.com/makiuchi-d/testdb"
 	"github.com/spf13/cobra"
 )
 
@@ -18,6 +23,9 @@ var cmd = &cobra.Command{
 var (
 	targetDir string
 	quit      bool
+	migNumber int
+
+	errInvalidDSNOrDumpfile = errors.New("invalid dsn form or dumpfile not found")
 )
 
 func init() {
@@ -42,4 +50,17 @@ func info(a ...any) {
 		return
 	}
 	fmt.Fprintln(os.Stdout, a...)
+}
+
+func openDsnOrDumpfile(arg string) (*sqlx.DB, error) {
+	if c, err := mysql.ParseDSN(arg); err == nil {
+		c.ParseTime = true
+		return sqlx.Open("mysql", c.FormatDSN())
+	}
+
+	db := sqlx.NewDb(testdb.New("db"), "mysql")
+	if err := sqlfile.Apply(db, arg); err != nil {
+		return nil, err
+	}
+	return db, nil
 }

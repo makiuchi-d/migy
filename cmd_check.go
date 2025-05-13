@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
@@ -17,27 +16,20 @@ import (
 )
 
 var cmdCheck = &cobra.Command{
-	Use:   "check [flags] [number]",
+	Use:   "check [flags]",
 	Short: "Check if an up/down migration pair is reversible",
 	Long: `Check if an up/down migration pair is reversible.
 Applies the up migration to a temporary database and then rolls it back
 using the down migration to verify that no differences remain.`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		num := 0
-		if len(args) > 0 {
-			var err error
-			num, err = strconv.Atoi(args[0])
-			if err != nil {
-				return err
-			}
-		}
-		return checkMigrationPair(targetDir, num)
+		return checkMigrationPair(targetDir, migNumber)
 	},
 }
 
 func init() {
 	cmd.AddCommand(cmdCheck)
+	cmdCheck.Flags().IntVarP(&migNumber, "number", "n", 0, "migration number")
 }
 
 func checkMigrationPair(dir string, num int) error {
