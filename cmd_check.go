@@ -86,7 +86,7 @@ func checkMigrationPair(dir string, num int) error {
 	}
 
 	if diff != "" {
-		info(strings.TrimSuffix(diff, "\n"), "check failed")
+		info(strings.TrimSuffix(diff, "\n"), "\ncheck failed")
 		os.Exit(1)
 	}
 
