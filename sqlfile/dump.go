@@ -25,7 +25,7 @@ func Dump(w io.Writer, db *sqlx.DB) error {
 			return err
 		}
 		if len(rec.Rows) == 0 {
-			break
+			continue
 		}
 
 		for i, r := range rec.Rows {
