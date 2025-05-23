@@ -23,6 +23,9 @@ CREATE TABLE users (
   PRIMARY KEY (id)
 );
 
+CREATE TABLE empty1 (id INTEGER PRIMARY KEY);
+CREATE TABLE empty2 (id INTEGER PRIMARY KEY);
+
 /*
  * STORED PROCEDURE
  */
@@ -207,6 +210,8 @@ func TestParse(t *testing.T) {
   name VARCHAR(255) NOT NULL,
   PRIMARY KEY (id)
 )`,
+		`CREATE TABLE empty1 (id INTEGER PRIMARY KEY)`,
+		`CREATE TABLE empty2 (id INTEGER PRIMARY KEY)`,
 		`CREATE PROCEDURE _migration_exists(IN input_id INTEGER)
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM _migrations WHERE id = input_id) THEN

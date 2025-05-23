@@ -8,6 +8,16 @@ CREATE TABLE `_migrations` (
 INSERT INTO `_migrations` (`id`,`applied`,`title`) VALUES
   (1, '2025-04-19 00:33:32', 'first');
 
+CREATE TABLE `empty1` (
+  `id` int NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
+CREATE TABLE `empty2` (
+  `id` int NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
 CREATE TABLE `users` (
   `id` int NOT NULL,
   `name` varchar(255) NOT NULL,
