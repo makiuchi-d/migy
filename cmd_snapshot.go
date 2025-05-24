@@ -75,6 +75,8 @@ func snapshotToSQLFile(dir string, num int, overwrite bool) error {
 		return err
 	}
 	defer f.Close()
-
+	if _, err := fmt.Fprint(f, signature, "\n\n"); err != nil {
+		return err
+	}
 	return sqlfile.Dump(f, db)
 }
