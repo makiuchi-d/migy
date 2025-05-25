@@ -12,7 +12,7 @@ import (
 var statusCheck bool
 
 var cmdStatus = &cobra.Command{
-	Use:   "status [flags] <dsn|dumpfile>",
+	Use:   "status [flags] [dsn|dumpfile]",
 	Short: "Show the status of each migration",
 	Long: `Show the status of each migration.
 Compares migration files with the given database or dump file
@@ -20,7 +20,7 @@ and summarizes their current status.`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) < 1 {
-			return fmt.Errorf("missing dsn or dumpfile")
+			return showStatus(nil, targetDir)
 		}
 
 		db, err := openDsnOrDumpfile(args[0])
@@ -38,9 +38,13 @@ func init() {
 }
 
 func showStatus(db *sqlx.DB, dir string) error {
-	hists, err := migrations.LoadHistories(db)
-	if err != nil {
-		return err
+	var hists []migrations.History
+	if db != nil {
+		var err error
+		hists, err = migrations.LoadHistories(db)
+		if err != nil {
+			return err
+		}
 	}
 
 	migs, err := migrations.Load(dir)
