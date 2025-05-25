@@ -9,6 +9,14 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+func all[T any](s iter.Seq[T]) []T {
+	var a []T
+	for v := range s {
+		a = append(a, v)
+	}
+	return a
+}
+
 func TestFindNumber(t *testing.T) {
 	migs := Migrations{
 		{Number: 0, Snapshot: true},
@@ -130,14 +138,6 @@ func TestFromSnapshot(t *testing.T) {
 }
 
 func TestApplicableFileNames(t *testing.T) {
-	all := func(f iter.Seq[string]) []string {
-		var a []string
-		for v := range f {
-			a = append(a, v)
-		}
-		return a
-	}
-
 	migs := Migrations{
 		{Number: 0, Title: "init", Snapshot: true},
 		{Number: 10, Title: "first", UpDown: true, Snapshot: false},
@@ -151,43 +151,32 @@ func TestApplicableFileNames(t *testing.T) {
 		t.Errorf("must be ErrSequenceGap: %v", err)
 	}
 
-	f, err := migs[:2].ApplicableFileNames()
-	if err != nil {
-		t.Errorf("[:2] error: %v", err)
-	} else {
-		exp := []string{
+	tests := map[string]struct {
+		migs Migrations
+		exp  []string
+	}{
+		"[:2]": {migs[:2], []string{
 			"000000_init.all.sql",
 			"000010_first.up.sql",
-		}
-		if diff := cmp.Diff(all(f), exp); diff != "" {
-			t.Fatalf("[:2] %v", diff)
-		}
-	}
-
-	f, err = migs[2:].ApplicableFileNames()
-	if err != nil {
-		t.Errorf("[2:] error: %v", err)
-	} else {
-		exp := []string{
+		}},
+		"[2:]": {migs[2:], []string{
 			"000020_second.all.sql",
 			"000030_third.up.sql",
 			"000040_fourth.up.sql",
-		}
-		if diff := cmp.Diff(all(f), exp); diff != "" {
-			t.Fatalf("[2:] %v", diff)
-		}
-	}
-
-	f, err = migs[3:].ApplicableFileNames()
-	if err != nil {
-		t.Errorf("[3:] error: %v", err)
-	} else {
-		exp := []string{
+		}},
+		"[3:]": {migs[3:], []string{
 			"000030_third.up.sql",
 			"000040_fourth.up.sql",
+		}},
+	}
+	for k, test := range tests {
+		f, err := test.migs.ApplicableFileNames()
+		if err != nil {
+			t.Errorf("%v error: %v", k, err)
+			continue
 		}
-		if diff := cmp.Diff(all(f), exp); diff != "" {
-			t.Fatalf("[3:] %v", diff)
+		if diff := cmp.Diff(all(f), test.exp); diff != "" {
+			t.Fatalf("%v: %v", k, diff)
 		}
 	}
 }
@@ -225,12 +214,7 @@ func TestFileNamesToApply(t *testing.T) {
 			continue
 		}
 
-		var files []string
-		for file := range f {
-			files = append(files, file)
-		}
-
-		if diff := cmp.Diff(files, test.exp); diff != "" {
+		if diff := cmp.Diff(all(f), test.exp); diff != "" {
 			t.Errorf("%q: %v", k, diff)
 		}
 	}
