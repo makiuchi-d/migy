@@ -39,25 +39,25 @@ func listUpgradeFiles(db *sqlx.DB, dir string, num int) error {
 	if err != nil {
 		return err
 	}
-
-	lastNum := 0
+	cur := 0
 	if len(hists) > 0 {
-		lastNum = hists[len(hists)-1].Id
+		cur = hists[len(hists)-1].Id
 	}
 
 	migs, err := migrations.Load(dir)
 	if err != nil {
 		return err
 	}
-	if num != 0 {
-		t, err := migs.FindNumber(num)
-		if err != nil {
-			return err
-		}
-		migs = migs[:t+1]
+	if num == 0 && len(migs) > 0 {
+		num = migs[len(migs)-1].Number
 	}
 
-	for f := range migs.ApplicableFileNamesAfter(lastNum) {
+	files, err := migs.FilenamesToApply(cur, num)
+	if err != nil {
+		return err
+	}
+
+	for f := range files {
 		fmt.Println(filepath.Join(dir, f))
 	}
 

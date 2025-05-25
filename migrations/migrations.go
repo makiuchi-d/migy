@@ -12,6 +12,7 @@ var (
 	ErrMissingFile     = errors.New("missing")
 	ErrTitleMismatch   = errors.New("title mismatch")
 	ErrInvalidFormat   = errors.New("invalid format")
+	ErrSequenceGap     = errors.New("sequence gap")
 )
 
 // Migration SQL file info
@@ -50,6 +51,21 @@ func (migs Migrations) FindNumber(num int) (int, error) {
 		}
 	}
 	return -1, fmt.Errorf("%w: number=%06d", ErrNoMigration, num)
+}
+
+func (migs Migrations) FindNext(num int) (int, error) {
+	idx := -1
+	for i := len(migs) - 1; i >= 0; i-- {
+		if migs[i].Number > num {
+			idx = i
+		} else {
+			break
+		}
+	}
+	if idx < 0 {
+		return -1, fmt.Errorf("%w: number > %06d", ErrNoMigration, num)
+	}
+	return idx, nil
 }
 
 // FindLatestSnapshot returns the index of the migration with snapshot
@@ -107,22 +123,49 @@ func (migs Migrations) ApplicableFileNames() iter.Seq[string] {
 	}
 }
 
-func (migs Migrations) ApplicableFileNamesAfter(n int) iter.Seq[string] {
-	return func(yield func(string) bool) {
-		i := len(migs) - 1
-		for ; i >= 0; i-- {
-			if migs[i].Number <= n {
-				break
-			}
+func (migs Migrations) FilenamesToApply(current, target int) (iter.Seq[string], error) {
+	if current == target {
+		return func(_ func(string) bool) {}, nil
+	}
+
+	reverse := false
+	if current > target {
+		reverse = true
+		current, target = target, current
+	}
+
+	start, err := migs.FindNext(current)
+	if err != nil {
+		return nil, err
+	}
+	last, err := migs.FindNumber(target)
+	if err != nil {
+		return nil, err
+	}
+
+	migs = migs[start : last+1]
+
+	for _, m := range migs {
+		if !m.UpDown {
+			return nil, fmt.Errorf("%w: number=%06d", ErrSequenceGap, m.Number)
 		}
-		i++
-		for ; i < len(migs); i++ {
-			if !migs[i].UpDown {
-				continue
+	}
+
+	if !reverse {
+		return func(yield func(string) bool) {
+			for _, m := range migs {
+				if !yield(m.UpName()) {
+					return
+				}
 			}
-			if !yield(migs[i].UpName()) {
-				return
+		}, nil
+	} else {
+		return func(yield func(string) bool) {
+			for i := len(migs) - 1; i >= 0; i-- {
+				if !yield(migs[i].DownName()) {
+					return
+				}
 			}
-		}
+		}, nil
 	}
 }
