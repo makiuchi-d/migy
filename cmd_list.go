@@ -52,7 +52,7 @@ func listUpgradeFiles(db *sqlx.DB, dir string, num int) error {
 		num = migs[len(migs)-1].Number
 	}
 
-	files, err := migs.FilenamesToApply(cur, num)
+	files, err := migs.FileNamesToApply(cur, num)
 	if err != nil {
 		return err
 	}

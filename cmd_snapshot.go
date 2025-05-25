@@ -42,14 +42,15 @@ func snapshotToSQLFile(dir string, num int, overwrite bool) error {
 		return err
 	}
 
-	if num == 0 {
-		num = migs[len(migs)-1].Number
+	if num != 0 {
+		i, err := migs.FindNumber(num)
+		if err != nil {
+			return err
+		}
+		migs = migs[:i+1]
 	}
 
-	migs, err = migs.FromSnapshotTo(num)
-	if err != nil {
-		return err
-	}
+	migs = migs.FromSnapshot()
 	if !migs[0].Snapshot {
 		warning("no snapshot (*.all.sql)")
 	}
@@ -58,12 +59,16 @@ func snapshotToSQLFile(dir string, num int, overwrite bool) error {
 	if last.Snapshot && !overwrite {
 		return fmt.Errorf("file exists: %s", filepath.Join(dir, last.SnapshotName()))
 	}
+	files, err := migs.ApplicableFileNames()
+	if err != nil {
+		return err
+	}
 
 	db := sqlx.NewDb(testdb.New("db"), "mysql")
 
-	for name := range migs.ApplicableFileNames() {
-		info("applying:", name)
-		if err := sqlfile.Apply(db, filepath.Join(dir, name)); err != nil {
+	for file := range files {
+		info("applying:", file)
+		if err := sqlfile.Apply(db, filepath.Join(dir, file)); err != nil {
 			return err
 		}
 	}

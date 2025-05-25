@@ -46,16 +46,29 @@ func checkMigrationPair(dir string, num int) error {
 		migs = migs[:i+1]
 	}
 
+	if len(migs) < 2 {
+		return fmt.Errorf("no migration to check")
+	}
+
 	mig := migs[len(migs)-1]
 	if !mig.UpDown {
 		return fmt.Errorf("no up/down migration: number=%06d", mig.Number)
 	}
+	migs = migs[:len(migs)-1].FromSnapshot()
+	if !migs[0].Snapshot {
+		warning("no snapshot (*.all.sql)")
+	}
+
+	files, err := migs.ApplicableFileNames()
+	if err != nil {
+		return err
+	}
 
 	db := sqlx.NewDb(testdb.New("db"), "mysql")
 
-	for name := range migs[:len(migs)-1].FromSnapshot().ApplicableFileNames() {
-		info("applying:", name)
-		if err := sqlfile.Apply(db, filepath.Join(dir, name)); err != nil {
+	for file := range files {
+		info("applying:", file)
+		if err := sqlfile.Apply(db, filepath.Join(dir, file)); err != nil {
 			return err
 		}
 	}

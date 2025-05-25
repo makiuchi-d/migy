@@ -99,7 +99,15 @@ func (migs Migrations) FromSnapshotTo(num int) (Migrations, error) {
 	return migs[max(start, 0) : last+1], nil
 }
 
-func (migs Migrations) ApplicableFileNames() iter.Seq[string] {
+func (migs Migrations) ApplicableFileNames() (iter.Seq[string], error) {
+	if len(migs) > 0 {
+		for _, m := range migs[1:] {
+			if !m.UpDown {
+				return nil, fmt.Errorf("%w: number=%06d", ErrSequenceGap, m.Number)
+			}
+		}
+	}
+
 	return func(yield func(string) bool) {
 		if len(migs) == 0 {
 			return
@@ -120,10 +128,10 @@ func (migs Migrations) ApplicableFileNames() iter.Seq[string] {
 				return
 			}
 		}
-	}
+	}, nil
 }
 
-func (migs Migrations) FilenamesToApply(current, target int) (iter.Seq[string], error) {
+func (migs Migrations) FileNamesToApply(current, target int) (iter.Seq[string], error) {
 	if current == target {
 		return func(_ func(string) bool) {}, nil
 	}

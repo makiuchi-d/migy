@@ -2,6 +2,7 @@ package migrations
 
 import (
 	"errors"
+	"iter"
 	"reflect"
 	"testing"
 
@@ -129,36 +130,69 @@ func TestFromSnapshot(t *testing.T) {
 }
 
 func TestApplicableFileNames(t *testing.T) {
+	all := func(f iter.Seq[string]) []string {
+		var a []string
+		for v := range f {
+			a = append(a, v)
+		}
+		return a
+	}
+
 	migs := Migrations{
 		{Number: 0, Title: "init", Snapshot: true},
 		{Number: 10, Title: "first", UpDown: true, Snapshot: false},
 		{Number: 20, Title: "second", UpDown: false, Snapshot: true},
-		{Number: 30, Title: "third", UpDown: true, Snapshot: true},
-	}
-	exp := []string{
-		"000000_init.all.sql",
-		"000010_first.up.sql",
-		"000030_third.up.sql",
+		{Number: 30, Title: "third", UpDown: true, Snapshot: false},
+		{Number: 40, Title: "fourth", UpDown: true, Snapshot: false},
 	}
 
-	var names []string
-	for n := range migs.ApplicableFileNames() {
-		names = append(names, n)
-	}
-	if diff := cmp.Diff(names, exp); diff != "" {
-		t.Fatal(diff)
+	_, err := migs.ApplicableFileNames()
+	if err == nil || !errors.Is(err, ErrSequenceGap) {
+		t.Errorf("must be ErrSequenceGap: %v", err)
 	}
 
-	names = names[:0]
-	for n := range migs[1:].ApplicableFileNames() {
-		names = append(names, n)
+	f, err := migs[:2].ApplicableFileNames()
+	if err != nil {
+		t.Errorf("[:2] error: %v", err)
+	} else {
+		exp := []string{
+			"000000_init.all.sql",
+			"000010_first.up.sql",
+		}
+		if diff := cmp.Diff(all(f), exp); diff != "" {
+			t.Fatalf("[:2] %v", diff)
+		}
 	}
-	if diff := cmp.Diff(names, exp[1:]); diff != "" {
-		t.Fatal(diff)
+
+	f, err = migs[2:].ApplicableFileNames()
+	if err != nil {
+		t.Errorf("[2:] error: %v", err)
+	} else {
+		exp := []string{
+			"000020_second.all.sql",
+			"000030_third.up.sql",
+			"000040_fourth.up.sql",
+		}
+		if diff := cmp.Diff(all(f), exp); diff != "" {
+			t.Fatalf("[2:] %v", diff)
+		}
+	}
+
+	f, err = migs[3:].ApplicableFileNames()
+	if err != nil {
+		t.Errorf("[3:] error: %v", err)
+	} else {
+		exp := []string{
+			"000030_third.up.sql",
+			"000040_fourth.up.sql",
+		}
+		if diff := cmp.Diff(all(f), exp); diff != "" {
+			t.Fatalf("[3:] %v", diff)
+		}
 	}
 }
 
-func TestFilenamesToApply(t *testing.T) {
+func TestFileNamesToApply(t *testing.T) {
 	migs := Migrations{
 		{Number: 0, Title: "init", Snapshot: true},
 		{Number: 10, Title: "first", UpDown: true, Snapshot: false},
@@ -183,7 +217,7 @@ func TestFilenamesToApply(t *testing.T) {
 	}
 
 	for k, test := range tests {
-		f, err := migs.FilenamesToApply(test.current, test.target)
+		f, err := migs.FileNamesToApply(test.current, test.target)
 		if test.err != nil {
 			if !errors.Is(err, test.err) {
 				t.Errorf("%v: error=%q wants %q", k, err, test.err)
