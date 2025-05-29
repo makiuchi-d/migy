@@ -7,8 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var initOverwrite bool
-
 // cmdInit represents the init command
 var cmdInit = &cobra.Command{
 	Use:   "init",
@@ -18,13 +16,13 @@ This file sets up the initial state of the database,
 including the _migrations table used to track applied migrations.`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return generateInitSQLFile(targetDir, initOverwrite)
+		return generateInitSQLFile(targetDir, overwrite)
 	},
 }
 
 func init() {
 	cmd.AddCommand(cmdInit)
-	cmdInit.Flags().BoolVarP(&initOverwrite, "force", "f", false, "Override the output file if it exists")
+	addFlagForce(cmdInit)
 }
 
 const initFile = "000000_init.all.sql"

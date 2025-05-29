@@ -26,6 +26,7 @@ var (
 	targetDir string
 	quit      bool
 	migNumber int
+	overwrite bool
 
 	errInvalidDSNOrDumpfile = errors.New("invalid dsn form or dumpfile not found")
 )
@@ -52,6 +53,14 @@ func info(a ...any) {
 		return
 	}
 	fmt.Fprintln(os.Stdout, a...)
+}
+
+func addFlagNumber(cmd *cobra.Command) {
+	cmd.Flags().IntVarP(&migNumber, "number", "n", -1, "migration number")
+}
+
+func addFlagForce(cmd *cobra.Command) {
+	cmd.Flags().BoolVarP(&overwrite, "force", "f", false, "Override the output file if it exists")
 }
 
 func openDsnOrDumpfile(arg string) (*sqlx.DB, error) {

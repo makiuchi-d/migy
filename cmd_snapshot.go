@@ -13,11 +13,6 @@ import (
 	"github.com/makiuchi-d/migy/sqlfile"
 )
 
-var (
-	snapshotNumber    int
-	snapshotOverwrite bool
-)
-
 var cmdSnapshot = &cobra.Command{
 	Use:   "snapshot",
 	Short: "Generate a SQL snapshot at the specified migration point",
@@ -25,14 +20,14 @@ var cmdSnapshot = &cobra.Command{
 that reproduces the database state at that point.`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return snapshotToSQLFile(targetDir, snapshotNumber, snapshotOverwrite)
+		return snapshotToSQLFile(targetDir, migNumber, overwrite)
 	},
 }
 
 func init() {
 	cmd.AddCommand(cmdSnapshot)
-	cmdSnapshot.Flags().IntVarP(&snapshotNumber, "number", "n", 0, "migration number")
-	cmdSnapshot.Flags().BoolVarP(&snapshotOverwrite, "force", "f", false, "Override the output file if it exists")
+	addFlagNumber(cmdSnapshot)
+	addFlagForce(cmdSnapshot)
 }
 
 func snapshotToSQLFile(dir string, num int, overwrite bool) error {
@@ -42,7 +37,7 @@ func snapshotToSQLFile(dir string, num int, overwrite bool) error {
 		return err
 	}
 
-	if num != 0 {
+	if num >= 0 {
 		i, err := migs.FindNumber(num)
 		if err != nil {
 			return err
@@ -50,32 +45,39 @@ func snapshotToSQLFile(dir string, num int, overwrite bool) error {
 		migs = migs[:i+1]
 	}
 
-	migs = migs.FromSnapshot()
-	if !migs[0].Snapshot {
-		warning("no snapshot (*.all.sql)")
+	if len(migs) < 2 {
+		return fmt.Errorf("no migration to make a snapshot")
 	}
 
-	last := migs[len(migs)-1]
-	if last.Snapshot && !overwrite {
-		return fmt.Errorf("file exists: %s", filepath.Join(dir, last.SnapshotName()))
+	mig := migs[len(migs)-1]
+	if !mig.UpDown {
+		return fmt.Errorf("no up/down migration: number=%06d", mig.Number)
 	}
-	files, err := migs.ApplicableFileNames()
+	if mig.Snapshot && !overwrite {
+		return fmt.Errorf("file exists: %s", filepath.Join(dir, mig.SnapshotName()))
+	}
+
+	files, err := migs[:len(migs)-1].FileNamesFromSnapshot()
 	if err != nil {
 		return err
 	}
 
 	db := sqlx.NewDb(testdb.New("db"), "mysql")
 
-	for file := range files {
+	for _, file := range files {
 		info("applying:", file)
 		if err := sqlfile.Apply(db, filepath.Join(dir, file)); err != nil {
 			return err
 		}
 	}
+	info("applying:", mig.UpName())
+	if err := sqlfile.Apply(db, filepath.Join(dir, mig.UpName())); err != nil {
+		return err
+	}
 
-	info("========\nwriting:", last.SnapshotName())
+	info("========\nwriting:", mig.SnapshotName())
 	flag := os.O_CREATE | os.O_RDWR | os.O_TRUNC
-	f, err := os.OpenFile(filepath.Join(dir, last.SnapshotName()), flag, 0666)
+	f, err := os.OpenFile(filepath.Join(dir, mig.SnapshotName()), flag, 0666)
 	if err != nil {
 		return err
 	}

@@ -23,11 +23,17 @@ type History struct {
 	Title   string    `db:"title"`
 }
 
-func LoadHistories(db *sqlx.DB) ([]History, error) {
+type Histories []History
+
+func LoadHistories(db *sqlx.DB) (Histories, error) {
 	const sql = "SELECT id, applied, title FROM _migrations ORDER BY id"
 	var recs []History
 	err := db.Select(&recs, sql)
 	return recs, err
+}
+
+func (hs Histories) CurrentNum() int {
+	return hs[len(hs)-1].Id
 }
 
 func BuildStatus(migs Migrations, hists []History) iter.Seq[Status] {

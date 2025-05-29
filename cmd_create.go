@@ -30,7 +30,7 @@ the corresponding rollback, ensuring changes can be reversed.`,
 
 func init() {
 	cmd.AddCommand(cmdCreate)
-	cmdCreate.Flags().IntVarP(&migNumber, "number", "n", 0, "migration number")
+	addFlagNumber(cmdCreate)
 }
 
 const (

@@ -1,10 +1,14 @@
 package dbstate
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
 )
+
+var ErrNoMigrationTable = errors.New("no '_migrations' table")
 
 type Table struct {
 	Name   string `db:"Table"`
@@ -18,6 +22,16 @@ type Procedure struct {
 	Charset     string `db:"character_set_client"`
 	Collation   string `db:"collation_connection"`
 	DBCollation string `db:"Database Collation"`
+}
+
+func HasMigrationTable(db *sqlx.DB) error {
+	const q = "SHOW TABLES LIKE '_migrations'"
+	var s string
+	err := db.Get(&s, q)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNoMigrationTable
+	}
+	return err
 }
 
 // GetTables returns table informations

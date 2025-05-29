@@ -29,7 +29,7 @@ using the down migration to verify that no differences remain.`,
 
 func init() {
 	cmd.AddCommand(cmdCheck)
-	cmdCheck.Flags().IntVarP(&migNumber, "number", "n", 0, "migration number")
+	addFlagNumber(cmdCheck)
 }
 
 func checkMigrationPair(dir string, num int) error {
@@ -38,7 +38,7 @@ func checkMigrationPair(dir string, num int) error {
 		return err
 	}
 
-	if num != 0 {
+	if num >= 0 {
 		i, err := migs.FindNumber(num)
 		if err != nil {
 			return err
@@ -54,19 +54,15 @@ func checkMigrationPair(dir string, num int) error {
 	if !mig.UpDown {
 		return fmt.Errorf("no up/down migration: number=%06d", mig.Number)
 	}
-	migs = migs[:len(migs)-1].FromSnapshot()
-	if !migs[0].Snapshot {
-		warning("no snapshot (*.all.sql)")
-	}
 
-	files, err := migs.ApplicableFileNames()
+	files, err := migs[:len(migs)-1].FileNamesFromSnapshot()
 	if err != nil {
 		return err
 	}
 
 	db := sqlx.NewDb(testdb.New("db"), "mysql")
 
-	for file := range files {
+	for _, file := range files {
 		info("applying:", file)
 		if err := sqlfile.Apply(db, filepath.Join(dir, file)); err != nil {
 			return err
