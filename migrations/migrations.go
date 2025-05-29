@@ -3,7 +3,6 @@ package migrations
 import (
 	"errors"
 	"fmt"
-	"iter"
 )
 
 var (
@@ -44,8 +43,7 @@ func (m *Migration) SnapshotName() string {
 
 // FindNumber returns the index of the migration with the specified number
 func (migs Migrations) FindNumber(num int) (int, error) {
-	i := len(migs) - 1
-	for ; i >= 0; i-- {
+	for i := len(migs) - 1; i >= 0; i-- {
 		if migs[i].Number == num {
 			return i, nil
 		}
@@ -53,6 +51,7 @@ func (migs Migrations) FindNumber(num int) (int, error) {
 	return -1, fmt.Errorf("%w: number=%06d", ErrNoMigration, num)
 }
 
+// FindNext returns the index of the next migration for the specified number.
 func (migs Migrations) FindNext(num int) (int, error) {
 	idx := -1
 	for i := len(migs) - 1; i >= 0; i-- {
@@ -69,111 +68,73 @@ func (migs Migrations) FindNext(num int) (int, error) {
 }
 
 // FindLatestSnapshot returns the index of the migration with snapshot
-func (migs Migrations) FindLatestSnapshot() int {
-	i := len(migs) - 1
-	for ; i >= 0; i-- {
+func (migs Migrations) FindLatestSnapshot() (int, error) {
+	for i := len(migs) - 1; i >= 0; i-- {
 		if migs[i].Snapshot {
-			return i
+			return i, nil
 		}
 	}
-	return i
+	return -1, fmt.Errorf("%w: no snapshot (*.all.sql))", ErrNoMigration)
 }
 
-// FromSnapshot returns migrations from the latest snapshot to the latest migration
-func (migs Migrations) FromSnapshot() Migrations {
-	if len(migs) == 0 {
-		return migs //empty
-	}
-	i := migs.FindLatestSnapshot()
-	return migs[max(i, 0):]
-}
-
-// FromSnapshotTo returns migrations from the snapshot before the specified migration to the specified migration
-func (migs Migrations) FromSnapshotTo(num int) (Migrations, error) {
-	last, err := migs.FindNumber(num)
+// FileNamesFromSnapshot returns the sql files to restore db state
+func (migs Migrations) FileNamesFromSnapshot() ([]string, error) {
+	st, err := migs.FindLatestSnapshot()
 	if err != nil {
 		return nil, err
 	}
 
-	start := migs[:last].FindLatestSnapshot()
-	return migs[max(start, 0) : last+1], nil
-}
+	files := make([]string, 0, len(migs)-st)
+	files = append(files, migs[st].SnapshotName())
 
-func (migs Migrations) ApplicableFileNames() (iter.Seq[string], error) {
-	if len(migs) > 0 {
-		for _, m := range migs[1:] {
-			if !m.UpDown {
-				return nil, fmt.Errorf("%w: number=%06d", ErrSequenceGap, m.Number)
-			}
-		}
-	}
-
-	return func(yield func(string) bool) {
-		if len(migs) == 0 {
-			return
-		}
-		f := migs[0].SnapshotName()
-		if !migs[0].Snapshot {
-			f = migs[0].UpName()
-		}
-		if !yield(f) {
-			return
-		}
-
-		for _, mig := range migs[1:] {
-			if !mig.UpDown {
-				continue
-			}
-			if !yield(mig.UpName()) {
-				return
-			}
-		}
-	}, nil
-}
-
-func (migs Migrations) FileNamesToApply(current, target int) (iter.Seq[string], error) {
-	if current == target {
-		return func(_ func(string) bool) {}, nil
-	}
-
-	reverse := false
-	if current > target {
-		reverse = true
-		current, target = target, current
-	}
-
-	start, err := migs.FindNext(current)
-	if err != nil {
-		return nil, err
-	}
-	last, err := migs.FindNumber(target)
-	if err != nil {
-		return nil, err
-	}
-
-	migs = migs[start : last+1]
-
-	for _, m := range migs {
+	for _, m := range migs[st+1:] {
 		if !m.UpDown {
 			return nil, fmt.Errorf("%w: number=%06d", ErrSequenceGap, m.Number)
 		}
+		files = append(files, m.UpName())
+	}
+	return files, nil
+}
+
+// FileNamesToApply returns the sql files to upgrade or downgrade from the current number to the target number
+func (migs Migrations) FileNamesToApply(current, target int) ([]string, error) {
+	if current == target {
+		return nil, nil
 	}
 
-	if !reverse {
-		return func(yield func(string) bool) {
-			for _, m := range migs {
-				if !yield(m.UpName()) {
-					return
-				}
+	t, err := migs.FindNumber(target)
+	if err != nil {
+		return nil, err
+	}
+
+	if current < target {
+		// upgrade
+		c, err := migs[:t+1].FindNext(current)
+		if err != nil {
+			return nil, err
+		}
+		files := make([]string, 0, t-c+1)
+		for _, m := range migs[c : t+1] {
+			if !m.UpDown {
+				return nil, fmt.Errorf("%w: number=%06d", ErrSequenceGap, m.Number)
 			}
-		}, nil
+			files = append(files, m.UpName())
+		}
+		return files, nil
 	} else {
-		return func(yield func(string) bool) {
-			for i := len(migs) - 1; i >= 0; i-- {
-				if !yield(migs[i].DownName()) {
-					return
-				}
+		// downgrade
+		c, err := migs.FindNumber(current)
+		if err != nil {
+			return nil, err
+		}
+		files := make([]string, 0, c-t+1)
+		for i := c; i > t; i-- {
+			m := migs[i]
+			if !m.UpDown {
+				return nil, fmt.Errorf("%w: number=%06d", ErrSequenceGap, m.Number)
 			}
-		}, nil
+			files = append(files, m.DownName())
+		}
+		return files, nil
 	}
 }

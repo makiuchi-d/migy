@@ -2,20 +2,10 @@ package migrations
 
 import (
 	"errors"
-	"iter"
-	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 )
-
-func all[T any](s iter.Seq[T]) []T {
-	var a []T
-	for v := range s {
-		a = append(a, v)
-	}
-	return a
-}
 
 func TestFindNumber(t *testing.T) {
 	migs := Migrations{
@@ -90,17 +80,22 @@ func TestFindLatestSnapshot(t *testing.T) {
 
 	tests := map[string]struct {
 		from, to, exp int
+		err           error
 	}{
-		"0-5": {0, 5, 5},
-		"0-4": {0, 4, 3},
-		"0-3": {0, 3, 3},
-		"0-2": {0, 2, 0},
-		"1-2": {1, 2, -1},
+		"0-5": {0, 5, 5, nil},
+		"0-4": {0, 4, 3, nil},
+		"0-3": {0, 3, 3, nil},
+		"0-2": {0, 2, 0, nil},
+		"1-2": {1, 2, -1, ErrNoMigration},
 	}
 
 	for k, test := range tests {
 		mm := migs[test.from : test.to+1]
-		i := mm.FindLatestSnapshot()
+		i, err := mm.FindLatestSnapshot()
+		if !errors.Is(err, test.err) {
+			t.Errorf("%v: error: %v wants %v", k, err, test.err)
+			continue
+		}
 		if i != test.exp {
 			t.Errorf("%v: %v (%06d) wants %v (%06d)",
 				k, i, mm[i].Number, test.exp, mm[test.exp].Number)
@@ -108,36 +103,7 @@ func TestFindLatestSnapshot(t *testing.T) {
 	}
 }
 
-func TestFromSnapshot(t *testing.T) {
-	migs, err := Load("testdata/migrations")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	exp := []int{3, 4}
-	nums := make([]int, 0, len(migs))
-	for _, m := range migs.FromSnapshot() {
-		nums = append(nums, m.Number)
-	}
-	if !reflect.DeepEqual(nums, exp) {
-		t.Fatalf("from snapshot: %v wants %v", nums, exp)
-	}
-
-	exp = []int{0, 1, 3}
-	nums = nums[:0]
-	mi, err := migs.FromSnapshotTo(3)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, m := range mi {
-		nums = append(nums, m.Number)
-	}
-	if !reflect.DeepEqual(nums, exp) {
-		t.Fatalf("from snapshot to '3': %v wants %v", nums, exp)
-	}
-}
-
-func TestApplicableFileNames(t *testing.T) {
+func TestFileNamesFromSnapshot(t *testing.T) {
 	migs := Migrations{
 		{Number: 0, Title: "init", Snapshot: true},
 		{Number: 10, Title: "first", UpDown: true, Snapshot: false},
@@ -146,9 +112,9 @@ func TestApplicableFileNames(t *testing.T) {
 		{Number: 40, Title: "fourth", UpDown: true, Snapshot: false},
 	}
 
-	_, err := migs.ApplicableFileNames()
-	if err == nil || !errors.Is(err, ErrSequenceGap) {
-		t.Errorf("must be ErrSequenceGap: %v", err)
+	_, err := migs[3:].FileNamesFromSnapshot()
+	if !errors.Is(err, ErrNoMigration) {
+		t.Errorf("must be ErrNoMigration: %v", err)
 	}
 
 	tests := map[string]struct {
@@ -159,23 +125,22 @@ func TestApplicableFileNames(t *testing.T) {
 			"000000_init.all.sql",
 			"000010_first.up.sql",
 		}},
-		"[2:]": {migs[2:], []string{
+		"[2:3]": {migs[2:3], []string{
 			"000020_second.all.sql",
-			"000030_third.up.sql",
-			"000040_fourth.up.sql",
 		}},
-		"[3:]": {migs[3:], []string{
+		"[:]": {migs[:], []string{
+			"000020_second.all.sql",
 			"000030_third.up.sql",
 			"000040_fourth.up.sql",
 		}},
 	}
 	for k, test := range tests {
-		f, err := test.migs.ApplicableFileNames()
+		files, err := test.migs.FileNamesFromSnapshot()
 		if err != nil {
 			t.Errorf("%v error: %v", k, err)
 			continue
 		}
-		if diff := cmp.Diff(all(f), test.exp); diff != "" {
+		if diff := cmp.Diff(test.exp, files); diff != "" {
 			t.Fatalf("%v: %v", k, diff)
 		}
 	}
@@ -206,15 +171,13 @@ func TestFileNamesToApply(t *testing.T) {
 	}
 
 	for k, test := range tests {
-		f, err := migs.FileNamesToApply(test.current, test.target)
-		if test.err != nil {
-			if !errors.Is(err, test.err) {
-				t.Errorf("%v: error=%q wants %q", k, err, test.err)
-			}
+		files, err := migs.FileNamesToApply(test.current, test.target)
+		if !errors.Is(err, test.err) {
+			t.Errorf("%v: error=%q wants %q", k, err, test.err)
 			continue
 		}
 
-		if diff := cmp.Diff(all(f), test.exp); diff != "" {
+		if diff := cmp.Diff(test.exp, files); diff != "" {
 			t.Errorf("%q: %v", k, diff)
 		}
 	}
