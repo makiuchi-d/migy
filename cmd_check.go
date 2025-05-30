@@ -69,16 +69,25 @@ func checkMigrationPair(dir string, num int) error {
 		}
 	}
 
-	// snapshot
-	info("======== taking a snapshot")
+	// snapshot for up/down check
 	ss, err := dbstate.TakeSnapshot(db)
 	if err != nil {
 		return err
 	}
 
+	info("---- up/down")
 	info("applying:", mig.UpName())
 	if err := sqlfile.Apply(db, filepath.Join(dir, mig.UpName())); err != nil {
 		return err
+	}
+
+	// snapshot for .all.sql check
+	var ss2 *dbstate.Snapshot
+	if mig.Snapshot {
+		ss2, err = dbstate.TakeSnapshot(db)
+		if err != nil {
+			return err
+		}
 	}
 
 	info("applying:", mig.DownName())
@@ -86,19 +95,36 @@ func checkMigrationPair(dir string, num int) error {
 		return err
 	}
 
-	// check with snapshot
-	info("======== checking")
-
+	info("checking...")
 	diff, err := dbstate.Diff(db, ss, mig.Ignores)
 	if err != nil {
 		return err
 	}
-
 	if diff != "" {
 		info(strings.TrimSuffix(diff, "\n"), "\ncheck failed")
 		os.Exit(1)
 	}
-
 	info("ok")
+	if !mig.Snapshot {
+		return nil
+	}
+
+	info("---- snapshot")
+	db2 := sqlx.NewDb(testdb.New("db2"), "mysql")
+	info("applying:", mig.SnapshotName())
+	if err := sqlfile.Apply(db2, filepath.Join(dir, mig.SnapshotName())); err != nil {
+		return err
+	}
+	info("checking...")
+	diff, err = dbstate.Diff(db2, ss2, map[string][]string{"_migrations": {"applied"}})
+	if err != nil {
+		return err
+	}
+	if diff != "" {
+		info(strings.TrimSuffix(diff, "\n"), "\ncheck failed")
+		os.Exit(1)
+	}
+	info("ok")
+
 	return nil
 }
