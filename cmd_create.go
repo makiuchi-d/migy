@@ -14,7 +14,7 @@ import (
 
 // cmdCreate represents the create command
 var cmdCreate = &cobra.Command{
-	Use:   "create [flags] <title>",
+	Use:   "create [flags] <TITLE>",
 	Short: "Create a new pair of up/down SQL migration files",
 	Long: `Create a new pair of up/down SQL migration files.
 The up file defines the forward migration. The down file contains
@@ -22,7 +22,7 @@ the corresponding rollback, ensuring changes can be reversed.`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
-			return errors.New("need title")
+			return errors.New("title is required")
 		}
 		return createNewMigrationFiles(targetDir, migNumber, args[0])
 	},

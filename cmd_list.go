@@ -13,19 +13,18 @@ import (
 )
 
 var cmdList = &cobra.Command{
-	Use:   "list [flags] <dsn|dumpfile>",
+	Use:   "list [flags] [DUMP_FILE | --host HOST DB_NAME | --dsn DSN]",
 	Short: "List unapplied migration files",
 	Long: `Lists unapplied migration files by comparing the migration directory
 with the given database or dump file.`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) < 1 {
-			return fmt.Errorf("missing dsn or dumpfile")
-		}
-
-		db, err := openDsnOrDumpfile(args[0])
+		db, err := openDBorDumpfile(args)
 		if err != nil {
 			return err
+		}
+		if db == nil {
+			return errors.New("data source or dump file is required")
 		}
 
 		return printFilesToApply(db, targetDir, migNumber)
@@ -35,6 +34,7 @@ with the given database or dump file.`,
 func init() {
 	cmd.AddCommand(cmdList)
 	addFlagNumber(cmdList)
+	addFlagsForDB(cmdList)
 }
 
 func printFilesToApply(db *sqlx.DB, dir string, num int) error {

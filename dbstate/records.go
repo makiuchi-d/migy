@@ -57,7 +57,7 @@ func quotedValue(v any) string {
 			b.WriteString("\\r")
 		case '\t':
 			b.WriteString("\\t")
-		case '\'', '\\', '%', '_':
+		case '\'', '\\', '%':
 			b.WriteByte('\\')
 			b.WriteRune(c)
 		default:

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
@@ -27,13 +29,34 @@ var (
 	quit      bool
 	migNumber int
 	overwrite bool
-
-	errInvalidDSNOrDumpfile = errors.New("invalid dsn form or dumpfile not found")
+	dbHost    string
+	dbPort    int
+	dbUser    string
+	dbPass    string
+	dbDsn     string
 )
 
 func init() {
+	cmd.PersistentFlags().BoolP("help", "", false, "help for this command") // disable shorthand
 	cmd.PersistentFlags().StringVarP(&targetDir, "dir", "d", ".", "directory with migration files")
 	cmd.PersistentFlags().BoolVarP(&quit, "quit", "q", false, "quit stdout")
+}
+
+func addFlagNumber(cmd *cobra.Command) {
+	cmd.Flags().IntVarP(&migNumber, "number", "n", -1, "migration number")
+	cmd.Flags().Lookup("number").DefValue = "latest"
+}
+
+func addFlagForce(cmd *cobra.Command) {
+	cmd.Flags().BoolVarP(&overwrite, "force", "f", false, "override the output file if it exists")
+}
+
+func addFlagsForDB(cmd *cobra.Command) {
+	cmd.Flags().StringVarP(&dbHost, "host", "h", "", "database host")
+	cmd.Flags().IntVarP(&dbPort, "port", "P", 3306, "database port")
+	cmd.Flags().StringVarP(&dbUser, "user", "u", "", "database user")
+	cmd.Flags().StringVarP(&dbPass, "password", "p", "", "database password")
+	cmd.Flags().StringVarP(&dbDsn, "dsn", "", "", "data source name (e.g. user:pass@tcp(host:port)/dbname)")
 }
 
 func main() {
@@ -55,22 +78,62 @@ func info(a ...any) {
 	fmt.Fprintln(os.Stdout, a...)
 }
 
-func addFlagNumber(cmd *cobra.Command) {
-	cmd.Flags().IntVarP(&migNumber, "number", "n", -1, "migration number")
-}
-
-func addFlagForce(cmd *cobra.Command) {
-	cmd.Flags().BoolVarP(&overwrite, "force", "f", false, "Override the output file if it exists")
-}
-
-func openDsnOrDumpfile(arg string) (*sqlx.DB, error) {
-	if c, err := mysql.ParseDSN(arg); err == nil {
-		c.ParseTime = true
-		return sqlx.Open("mysql", c.FormatDSN())
+func openDB(args []string) (*sqlx.DB, error) {
+	if dbHost != "" {
+		return openDBHost(dbUser, dbPass, dbHost, dbPort, args)
 	}
+	if dbDsn != "" {
+		return openDSN(dbDsn)
+	}
+	return nil, errors.New("--host or --dsn required")
+}
 
+func openDBorDumpfile(args []string) (*sqlx.DB, error) {
+	if dbHost != "" {
+		return openDBHost(dbUser, dbPass, dbHost, dbPort, args)
+	}
+	if dbDsn != "" {
+		return openDSN(dbDsn)
+	}
+	if len(args) < 1 {
+		return nil, nil
+	}
+	return openDumpfile(args[0])
+}
+
+func openDBHost(usr, pass, host string, port int, args []string) (*sqlx.DB, error) {
+	if len(args) < 1 {
+		return nil, errors.New("db_name is required")
+	}
+	up := usr
+	if up == "" {
+		u, err := user.Current()
+		if err != nil {
+			return nil, err
+		}
+		up = u.Username
+	}
+	if pass != "" {
+		up += ":" + pass
+	}
+	dsn := fmt.Sprintf("%s@tcp(%s:%d)/%s?parseTime=true", up, host, port, args[0])
+	return sqlx.Open("mysql", dsn)
+}
+
+func openDSN(dsn string) (*sqlx.DB, error) {
+	c, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		return nil, err
+	}
+	c.ParseTime = true
+	time.Sleep(3 * time.Second)
+	db, err := sqlx.Open("mysql", c.FormatDSN())
+	return db, err
+}
+
+func openDumpfile(dumpfile string) (*sqlx.DB, error) {
 	db := sqlx.NewDb(testdb.New("db"), "mysql")
-	if err := sqlfile.Apply(db, arg); err != nil {
+	if err := sqlfile.Apply(db, dumpfile); err != nil {
 		return nil, err
 	}
 	return db, nil
