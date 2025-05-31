@@ -14,9 +14,9 @@ import (
 
 var cmdList = &cobra.Command{
 	Use:   "list [flags] [DUMP_FILE | --host HOST DB_NAME | --dsn DSN]",
-	Short: "List unapplied migration files",
-	Long: `Lists unapplied migration files by comparing the migration directory
-with the given database or dump file.`,
+	Short: "List migration files needed to reach the target state",
+	Long: `Lists migration files needed to reach the target migration number by
+comparing the migration directory with the database or dump file.`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		db, err := openDBorDumpfile(args)
