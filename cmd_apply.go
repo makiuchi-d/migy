@@ -26,7 +26,7 @@ This command requires a live database connection.`,
 			return err
 		}
 
-		return applyMigrations(db, targetDir, migNumber)
+		return applyMigrations(db, targetDir, targetNum)
 	},
 }
 

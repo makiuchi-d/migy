@@ -24,7 +24,7 @@ the corresponding rollback, ensuring changes can be reversed.`,
 		if len(args) == 0 {
 			return errors.New("title is required")
 		}
-		return createNewMigrationFiles(targetDir, migNumber, args[0])
+		return createNewMigrationFiles(targetDir, targetNum, args[0])
 	},
 }
 
@@ -46,14 +46,18 @@ DELETE FROM _migrations WHERE id = {{.Number}};
 `
 )
 
+func nextNum(n int) int {
+	return n + 10 - n%10
+}
+
 func createNewMigrationFiles(dir string, num int, title string) error {
 	migs, err := migrations.Load(dir)
 	if err != nil {
 		return err
 	}
 
-	if num == 0 {
-		num = migs[len(migs)-1].Number + 1
+	if num < 0 {
+		num = nextNum(migs.Last().Number)
 	} else {
 		for i := len(migs) - 1; i >= 0; i-- {
 			n := migs[i].Number

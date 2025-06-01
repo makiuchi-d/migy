@@ -20,7 +20,7 @@ var cmdSnapshot = &cobra.Command{
 that reproduces the database state at that point.`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return snapshotToSQLFile(targetDir, migNumber, overwrite)
+		return snapshotToSQLFile(targetDir, targetNum, overwrite)
 	},
 }
 
@@ -49,7 +49,7 @@ func snapshotToSQLFile(dir string, num int, overwrite bool) error {
 		return fmt.Errorf("no migration to make a snapshot")
 	}
 
-	mig := migs[len(migs)-1]
+	mig := migs.Last()
 	if !mig.UpDown {
 		return fmt.Errorf("no up/down migration: number=%06d", mig.Number)
 	}

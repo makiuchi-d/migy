@@ -41,6 +41,11 @@ func (m *Migration) SnapshotName() string {
 	return fmt.Sprintf("%06d_%s.all.sql", m.Number, m.Title)
 }
 
+// Last returns last migration
+func (migs Migrations) Last() *Migration {
+	return migs[len(migs)-1]
+}
+
 // FindNumber returns the index of the migration with the specified number
 func (migs Migrations) FindNumber(num int) (int, error) {
 	for i := len(migs) - 1; i >= 0; i-- {

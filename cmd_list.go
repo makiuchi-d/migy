@@ -27,7 +27,7 @@ comparing the migration directory with the database or dump file.`,
 			return errors.New("data source or dump file is required")
 		}
 
-		return printFilesToApply(db, targetDir, migNumber)
+		return printFilesToApply(db, targetDir, targetNum)
 	},
 }
 
@@ -54,7 +54,7 @@ func listFilesToApply(db *sqlx.DB, dir string, num int) ([]string, error) {
 		return nil, err
 	}
 	if num < 0 {
-		num = migs[len(migs)-1].Number
+		num = migs.Last().Number
 	}
 
 	err = dbstate.HasMigrationTable(db)

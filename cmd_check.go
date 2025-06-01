@@ -23,7 +23,7 @@ Applies the up migration to a temporary database and then rolls it back
 using the down migration to verify that no differences remain.`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return checkMigrationPair(targetDir, migNumber)
+		return checkMigrationPair(targetDir, targetNum)
 	},
 }
 
@@ -50,7 +50,7 @@ func checkMigrationPair(dir string, num int) error {
 		return fmt.Errorf("no migration to check")
 	}
 
-	mig := migs[len(migs)-1]
+	mig := migs.Last()
 	if !mig.UpDown {
 		return fmt.Errorf("no up/down migration: number=%06d", mig.Number)
 	}
