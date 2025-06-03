@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
@@ -23,13 +25,67 @@ Applies the up migration to a temporary database and then rolls it back
 using the down migration to verify that no differences remain.`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if checkFrom >= 0 {
+			return checkMigrationsFrom(targetDir, checkFrom, targetNum)
+		}
 		return checkMigrationPair(targetDir, targetNum)
 	},
 }
 
+var checkFrom int
+
 func init() {
 	cmd.AddCommand(cmdCheck)
 	addFlagNumber(cmdCheck)
+	cmdCheck.Flags().IntVarP(&checkFrom, "from", "", -1, "check each migration from this to --number")
+	cmdCheck.Flags().Lookup("from").DefValue = "n"
+}
+
+// chheckMigrationsFrom checks migrations from specified number step by step.
+func checkMigrationsFrom(dir string, from, to int) error {
+	if to > 0 && from > to {
+		return fmt.Errorf("--from (%06d) must be less than %06d", from, to)
+	}
+	migs, err := migrations.Load(dir)
+	f, err := migs.FindNumber(from)
+	if err != nil {
+		return err
+	}
+	migs = migs[f:]
+	if to >= 0 {
+		t, err := migs.FindNumber(to)
+		if err != nil {
+			return err
+		}
+		migs = migs[:t+1]
+	}
+
+	// use a subprocess per check to isolate in-process db and release memory after each run.
+	cmd := []string{
+		os.Args[0], // [0]
+		"check",    // [1]
+		"-n",       // [2]
+		"",         // [3]: placeholder
+	}
+	if dir != "." {
+		cmd = append(cmd, "-d", dir)
+	}
+	if quit {
+		cmd = append(cmd, "-q")
+	}
+
+	for _, mig := range migs {
+		info(fmt.Sprintf("==== check %06d", mig.Number))
+		cmd[3] = strconv.Itoa(mig.Number)
+		c := exec.Command(cmd[0], cmd[1:]...)
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		if err := c.Run(); err != nil {
+			os.Exit(c.ProcessState.ExitCode())
+		}
+	}
+
+	return nil
 }
 
 func checkMigrationPair(dir string, num int) error {

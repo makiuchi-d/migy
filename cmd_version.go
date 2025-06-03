@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"runtime/debug"
 
 	"github.com/spf13/cobra"
@@ -21,10 +22,14 @@ func init() {
 }
 
 func showVersion() error {
+	fmt.Println("migy version", getVersion())
+	return nil
+}
+
+func getVersion() string {
 	ver := "(devel)"
 	if bi, ok := debug.ReadBuildInfo(); ok {
 		ver = bi.Main.Version
 	}
-	info(ver)
-	return nil
+	return ver
 }
