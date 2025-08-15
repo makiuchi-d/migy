@@ -29,7 +29,7 @@ func TestGenerateInitSQLFile(t *testing.T) {
 		},
 	}
 
-	golden, err := os.ReadFile(filepath.Join("testdata", "init_test", "golden.sql"))
+	golden, err := os.ReadFile(filepath.Join("testdata", "init", "golden.sql"))
 	if err != nil {
 		t.Fatalf("failed to read golden file: %v", err)
 	}
