@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"strconv"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 	"github.com/makiuchi-d/migy/sqlfile"
 	"github.com/makiuchi-d/testdb"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var cmd = &cobra.Command{
@@ -42,9 +44,25 @@ func init() {
 	cmd.PersistentFlags().BoolVarP(&quit, "quit", "q", false, "quit stdout")
 }
 
+// numValue parses integer flags as 10-based number (000010 => 10)
+type numValue int
+
+var _ pflag.Value = (*numValue)(nil)
+
+func (n *numValue) Set(s string) error {
+	v, err := strconv.ParseInt(s, 10, 64)
+	*n = numValue(v)
+	return err
+}
+
+func (n *numValue) Type() string { return "int" }
+
+func (n *numValue) String() string { return strconv.Itoa(int(*n)) }
+
 func addFlagNumber(cmd *cobra.Command) {
-	cmd.Flags().IntVarP(&targetNum, "number", "n", -1, "target migration number")
-	cmd.Flags().Lookup("number").DefValue = "latest"
+	targetNum = -1
+	f := cmd.Flags().VarPF((*numValue)(&targetNum), "number", "n", "target migration number")
+	f.DefValue = "latest"
 }
 
 func addFlagForce(cmd *cobra.Command) {
@@ -95,10 +113,11 @@ func openDBorDumpfile(args []string) (*sqlx.DB, error) {
 	if dbDsn != "" {
 		return openDSN(dbDsn)
 	}
-	if len(args) < 1 {
-		return nil, nil
+	if len(args) > 0 {
+		return openDumpfile(args[0])
 	}
-	return openDumpfile(args[0])
+	// cmd_status allows no-datasource operation
+	return nil, nil
 }
 
 func openDBHost(usr, pass, host string, port int, args []string) (*sqlx.DB, error) {
