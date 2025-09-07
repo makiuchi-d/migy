@@ -6,8 +6,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/jmoiron/sqlx"
-	"github.com/makiuchi-d/migy/sqlfile"
 	"github.com/makiuchi-d/testdb"
+
+	"github.com/makiuchi-d/migy/sqlfile"
 )
 
 func TestListFilesToApply(t *testing.T) {

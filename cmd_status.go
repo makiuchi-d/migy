@@ -1,11 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cobra"
 
+	"github.com/makiuchi-d/migy/dbstate"
 	"github.com/makiuchi-d/migy/migrations"
 )
 
@@ -22,7 +24,13 @@ and summarizes their current status.`,
 			return err
 		}
 
-		return showStatus(db, targetDir)
+		st, err := readStatus(db, targetDir)
+		if err != nil {
+			return err
+		}
+		fmt.Print(st)
+
+		return nil
 	},
 }
 
@@ -31,30 +39,32 @@ func init() {
 	addFlagsForDB(cmdStatus)
 }
 
-func showStatus(db *sqlx.DB, dir string) error {
+func readStatus(db *sqlx.DB, dir string) (string, error) {
 	var hists []migrations.History
 	if db != nil {
-		var err error
-		hists, err = migrations.LoadHistories(db)
-		if err != nil {
-			return err
+		err := dbstate.HasMigrationTable(db)
+		if !errors.Is(err, dbstate.ErrNoMigrationTable) {
+			hists, err = migrations.LoadHistories(db)
+			if err != nil {
+				return "", err
+			}
 		}
 	}
 
 	migs, err := migrations.Load(dir)
 	if err != nil {
-		return err
+		return "", err
 	}
 
+	var b []byte
 	for st := range migrations.BuildStatus(migs, hists) {
-		fmt.Println(formatStatus(st))
+		b = append(formatStatus(b, st), '\n')
 	}
 
-	return nil
+	return string(b), nil
 }
 
-func formatStatus(st migrations.Status) string {
-	var b []byte
+func formatStatus(b []byte, st migrations.Status) []byte {
 	b = fmt.Appendf(b, "%06d\t", st.Number)
 
 	if st.UpDown {
@@ -80,5 +90,5 @@ func formatStatus(st migrations.Status) string {
 		b = fmt.Appendf(b, "⚠%q DB:%q", st.Title, st.DBTitle)
 	}
 
-	return string(b)
+	return b
 }
