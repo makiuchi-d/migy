@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -13,6 +15,7 @@ var ErrNoMigrationTable = errors.New("no '_migrations' table")
 type Table struct {
 	Name   string `db:"Table"`
 	Create string `db:"Create Table"`
+	Refs   []string
 }
 
 type Procedure struct {
@@ -23,6 +26,8 @@ type Procedure struct {
 	Collation   string `db:"collation_connection"`
 	DBCollation string `db:"Database Collation"`
 }
+
+var reRef = regexp.MustCompile("REFERENCES `([^`]*)`")
 
 func HasMigrationTable(db *sqlx.DB) error {
 	const q = "SHOW TABLES LIKE '_migrations'"
@@ -36,19 +41,57 @@ func HasMigrationTable(db *sqlx.DB) error {
 
 // GetTables returns table informations
 func GetTables(db *sqlx.DB) ([]*Table, error) {
-	var nms []string
-	if err := db.Select(&nms, "SHOW TABLES"); err != nil {
+	var names []string
+	if err := db.Select(&names, "SHOW TABLES"); err != nil {
 		return nil, err
 	}
-	tbls := make([]*Table, 0, len(nms))
-	for _, n := range nms {
+	tbls := make([]*Table, 0, len(names))
+	done := make(map[string]struct{})
+	pendings := make(map[string][]*Table)
+	var appendTable func(t *Table) bool
+	appendTable = func(t *Table) bool {
+		for _, rt := range t.Refs {
+			if _, ok := done[rt]; !ok {
+				return false
+			}
+		}
+		tbls = append(tbls, t)
+		done[t.Name] = struct{}{}
+		for _, pt := range pendings[t.Name] {
+			appendTable(pt)
+		}
+		delete(pendings, t.Name)
+		return true
+	}
+
+	for _, n := range names {
 		var t Table
 		err := db.Get(&t, fmt.Sprintf("SHOW CREATE TABLE `%s`", n))
 		if err != nil {
 			return nil, err
 		}
-		tbls = append(tbls, &t)
+		for _, ref := range reRef.FindAllStringSubmatch(t.Create, -1) {
+			t.Refs = append(t.Refs, ref[1])
+		}
+		if !appendTable(&t) {
+			for _, rt := range t.Refs {
+				if _, ok := done[rt]; !ok {
+					pendings[rt] = append(pendings[rt], &t)
+				}
+			}
+		}
 	}
+
+	if len(tbls) != len(names) {
+		var p []string
+		for _, n := range names {
+			if _, ok := done[n]; !ok {
+				p = append(p, n)
+			}
+		}
+		return nil, fmt.Errorf("pending tables: %v", strings.Join(p, ", "))
+	}
+
 	return tbls, nil
 }
 

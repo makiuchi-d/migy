@@ -17,7 +17,7 @@ func TestTakeSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	exptbls := []string{"_migrations", "users"}
+	exptbls := []string{"_migrations", "users", "user_emails"}
 	expprocs := []string{"_migration_exists"}
 	exprecs := map[string]struct {
 		Columns []string
@@ -30,6 +30,10 @@ func TestTakeSnapshot(t *testing.T) {
 		"users": {
 			Columns: []string{"id", "name"},
 			Rows:    []string{"(1, 'alice')", "(2, 'bob')", "(3, 'carol')"},
+		},
+		"user_emails": {
+			Columns: []string{"user_id", "email"},
+			Rows:    []string{"(1, 'alice@example.com')", "(2, 'bob1@example.com')", "(2, 'bob2@example.com')"},
 		},
 	}
 

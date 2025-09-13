@@ -24,6 +24,14 @@ CREATE TABLE users (
   name VARCHAR(255) NOT NULL,
   PRIMARY KEY (id)
 );
+
+CREATE TABLE user_emails (
+  user_id INTEGER NOT NULL,
+  email   VARCHAR(255) NOT NULL,
+  CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users (id),
+  PRIMARY KEY (user_id, email)
+);
+
 DELIMITER //
 
 CREATE PROCEDURE _migration_exists(IN input_id INTEGER)
@@ -38,6 +46,7 @@ END //
 
 INSERT INTO _migrations (id, applied, title) VALUES (1, '2025-04-19 00:33:32', 'first');
 INSERT INTO users (id, name) VALUES (1, 'alice'), (2, 'bob'), (3, 'carol');
+INSERT INTO user_emails (user_id, email) VALUES (1, 'alice@example.com'), (2, 'bob1@example.com'), (2, 'bob2@example.com');
 `)
 
 func prepareTestDb(t *testing.T) *sqlx.DB {
@@ -78,9 +87,59 @@ func TestGetTables(t *testing.T) {
 				"  PRIMARY KEY (`id`)\n" +
 				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin",
 		},
+		{
+			Name: "user_emails",
+			Create: "" +
+				"CREATE TABLE `user_emails` (\n" +
+				"  `user_id` int NOT NULL,\n" +
+				"  `email` varchar(255) NOT NULL,\n" +
+				"  PRIMARY KEY (`user_id`,`email`),\n" +
+				"  CONSTRAINT `fk_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin",
+			Refs: []string{"users"},
+		},
 	}
 
-	if diff := cmp.Diff(tbls, exp); diff != "" {
+	if diff := cmp.Diff(exp, tbls); diff != "" {
+		t.Fatal(diff)
+	}
+}
+
+func TestGetTableWithForeignKeys(t *testing.T) {
+	// alpha --- beta
+	//        /       \
+	// gamma --- delta --- epsilon
+	queries := []string{
+		"CREATE TABLE alpha (id int NOT NULL PRIMARY KEY)",
+		"CREATE TABLE gamma (id int NOT NULL PRIMARY KEY)",
+		"CREATE TABLE beta (id int NOT NULL PRIMARY KEY, aid int, gid int," +
+			"FOREIGN KEY (aid) REFERENCES alpha (id)," +
+			"FOREIGN KEY (gid) REFERENCES gamma (id))",
+		"CREATE TABLE delta (id int NOT NULL PRIMARY KEY, gid int," +
+			"FOREIGN KEY (gid) REFERENCES gamma (id))",
+		"CREATE TABLE epsilon (id int NOT NULL PRIMARY KEY, bid int, did int," +
+			"FOREIGN KEY (bid) REFERENCES beta (id)," +
+			"FOREIGN KEY (did) REFERENCES delta (id))",
+	}
+	orderexp := []string{"alpha", "gamma", "beta", "delta", "epsilon"}
+
+	db := sqlx.NewDb(testdb.New("db"), "mysql")
+	for _, q := range queries {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tbls, err := dbstate.GetTables(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var order []string
+	for _, t := range tbls {
+		order = append(order, t.Name)
+	}
+
+	if diff := cmp.Diff(orderexp, order); diff != "" {
 		t.Fatal(diff)
 	}
 }
