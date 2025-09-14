@@ -1,6 +1,7 @@
 package dbstate_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -57,6 +58,25 @@ func prepareTestDb(t *testing.T) *sqlx.DB {
 		}
 	}
 	return db
+}
+
+func TestHasMigrationtable(t *testing.T) {
+	db := prepareTestDb(t)
+
+	err := dbstate.HasMigrationTable(db)
+	if err != nil {
+		t.Fatalf("HasMigrationTable(ok): %v", err)
+	}
+
+	_, err = db.Exec("DROP TABLE _migrations")
+	if err != nil {
+		t.Fatalf("Drop table: %v", err)
+	}
+
+	err = dbstate.HasMigrationTable(db)
+	if !errors.Is(err, dbstate.ErrNoMigrationTable) {
+		t.Fatalf("HasMigrationTable(ng): %v", err)
+	}
 }
 
 func TestGetTables(t *testing.T) {
