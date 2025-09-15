@@ -8,8 +8,9 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/makiuchi-d/migy/sqlfile"
 	"github.com/spf13/cobra"
+
+	"github.com/makiuchi-d/migy/sqlfile"
 )
 
 var cmdApply = &cobra.Command{
@@ -26,7 +27,26 @@ This command requires a live database connection.`,
 			return err
 		}
 
-		return applyMigrations(db, targetDir, targetNum)
+		confirm := func(msg func()) bool {
+			if applyYes {
+				return true
+			}
+			msg()
+			fmt.Print("Do you want to continue? [y/N]: ")
+			s := bufio.NewScanner(os.Stdin)
+			s.Scan()
+			in := strings.ToLower(strings.TrimSpace(s.Text()))
+			return in == "y" || in != "yes"
+		}
+
+		ok, err := applyMigrations(db, targetDir, targetNum, confirm)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			os.Exit(1)
+		}
+		return nil
 	},
 }
 
@@ -39,33 +59,32 @@ func init() {
 	cmdApply.Flags().BoolVarP(&applyYes, "yes", "y", false, "assume \"yes\" as answer to all prompts")
 }
 
-func applyMigrations(db *sqlx.DB, dir string, num int) error {
+func applyMigrations(db *sqlx.DB, dir string, num int, confirm func(func()) bool) (bool, error) {
 	files, err := listFilesToApply(db, dir, num)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if len(files) == 0 {
 		info("Nothing to do.")
-		return nil
+		return true, nil
 	}
-	if !applyYes {
+	abort := !confirm(func() {
 		info("The following migration files will be applied:")
 		for _, file := range files {
 			info(" -", file)
 		}
-		fmt.Print("Do you want to continue? [y/N]: ")
-		s := bufio.NewScanner(os.Stdin)
-		s.Scan()
-		in := strings.ToLower(strings.TrimSpace(s.Text()))
-		if in != "y" && in != "yes" {
-			info("Abort.")
-			os.Exit(1)
-		}
+	})
+	if abort {
+		info("Abort.")
+		return false, nil
 	}
 
 	for _, file := range files {
 		info("applying:", file)
-		sqlfile.Apply(db, filepath.Join(dir, file))
+		if err := sqlfile.Apply(db, filepath.Join(dir, file)); err != nil {
+			return false, err
+		}
 	}
-	return nil
+
+	return true, nil
 }

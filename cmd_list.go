@@ -7,9 +7,10 @@ import (
 	"path/filepath"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/spf13/cobra"
+
 	"github.com/makiuchi-d/migy/dbstate"
 	"github.com/makiuchi-d/migy/migrations"
-	"github.com/spf13/cobra"
 )
 
 var cmdList = &cobra.Command{
