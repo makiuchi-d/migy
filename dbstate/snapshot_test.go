@@ -5,8 +5,9 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/makiuchi-d/migy/dbstate"
 	"golang.org/x/exp/maps"
+
+	"github.com/makiuchi-d/migy/dbstate"
 )
 
 func TestTakeSnapshot(t *testing.T) {

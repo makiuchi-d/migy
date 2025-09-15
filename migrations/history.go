@@ -33,6 +33,9 @@ func LoadHistories(db *sqlx.DB) (Histories, error) {
 }
 
 func (hs Histories) CurrentNum() int {
+	if len(hs) == 0 {
+		return -1
+	}
 	return hs[len(hs)-1].Id
 }
 

@@ -7,6 +7,19 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+func TestLast(t *testing.T) {
+	migs := Migrations{
+		{Number: 0},
+		{Number: 10},
+		{Number: 20},
+	}
+
+	m := migs.Last()
+	if m.Number != 20 {
+		t.Errorf("Last: Number=%v, wants 20", m.Number)
+	}
+}
+
 func TestFindNumber(t *testing.T) {
 	migs := Migrations{
 		{Number: 0, Snapshot: true},
