@@ -58,6 +58,9 @@ func checkMigrationsFrom(dir string, from, to int) error {
 		return fmt.Errorf("--from (%06d) must be less than %06d", from, to)
 	}
 	migs, err := migrations.Load(dir)
+	if err != nil {
+		return err
+	}
 	f, err := migs.FindNumber(from)
 	if err != nil {
 		return err
