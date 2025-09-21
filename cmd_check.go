@@ -48,8 +48,9 @@ var checkFrom int
 func init() {
 	cmd.AddCommand(cmdCheck)
 	addFlagNumber(cmdCheck)
-	cmdCheck.Flags().IntVarP(&checkFrom, "from", "", -1, "check each migration from this to --number")
-	cmdCheck.Flags().Lookup("from").DefValue = "n"
+	checkFrom = -1
+	f := cmdCheck.Flags().VarPF((*numValue)(&checkFrom), "from", "", "check each migration from this to --number")
+	f.DefValue = "n"
 }
 
 // chheckMigrationsFrom checks migrations from specified number step by step.
