@@ -77,27 +77,29 @@ func createNewMigrationFiles(dir string, num int, title string) error {
 
 	err = generateMigrationSQLFile(dir, mig.UpName(), createUpSQL, mig)
 	if err != nil {
-		return fmt.Errorf("up sql file (%s,%s): %w", dir, mig.UpName(), err)
+		return err
 	}
 
 	err = generateMigrationSQLFile(dir, mig.DownName(), createDownSQL, mig)
 	if err != nil {
-		return fmt.Errorf("down sql file: %w", err)
+		return err
 	}
 
 	return nil
 }
 
 func generateMigrationSQLFile(dir, name, tmpl string, mig migrations.Migration) error {
-	f, err := os.OpenFile(filepath.Join(dir, name), os.O_CREATE|os.O_RDWR|os.O_EXCL, 0666)
+	path := filepath.Join(dir, name)
+	info("writing:", path)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_EXCL, 0666)
 	if err != nil {
-		return err
+		return fmt.Errorf("%v: %w", path, err)
 	}
 	defer f.Close()
 
 	t, err := template.New("").Parse(tmpl)
 	if err != nil {
-		return err
+		return fmt.Errorf("%v: %w", path, err)
 	}
 
 	return t.Execute(f, mig)

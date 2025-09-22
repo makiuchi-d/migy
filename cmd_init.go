@@ -56,6 +56,7 @@ func generateInitSQLFile(dir string, overwrite bool) error {
 	if !overwrite {
 		flag |= os.O_EXCL
 	}
+	info("writing:", path)
 	f, err := os.OpenFile(path, flag, 0666)
 	if err != nil {
 		return err
