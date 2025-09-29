@@ -195,9 +195,9 @@ migy status [flags] [DUMP_FILE | --host HOST DB_NAME | --dsn DSN]
 
 **Example Output**
 ```
-000000　　　	✅2023-10-27 10:00:00	"init"
-000010⏫⏬　	✅2023-10-27 10:05:00	"add_users_table"
-000020⏫⏬　	　0000-00-00 --:--:--	"add_posts_table"
+ 000000　　　	✅2023-10-27 10:00:00	"init"
+ 000010⏫⏬　	✅2023-10-27 10:05:00	"add_users_table"
+ 000020⏫⏬　	　0000-00-00 --:--:--	"add_posts_table"
 ```
  * `⏫⏬`: An up/down migration pair exists.
  * `⏺`: A snapshot (`.all.sql`) file exists.

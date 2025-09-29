@@ -1,6 +1,6 @@
 module github.com/makiuchi-d/migy
 
-go 1.24.2
+go 1.25.1
 
 require (
 	github.com/go-sql-driver/mysql v1.9.2
@@ -8,8 +8,9 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/makiuchi-d/anydiff v1.0.0
 	github.com/makiuchi-d/testdb v1.3.1
-	github.com/spf13/cobra v1.9.1
-	golang.org/x/exp v0.0.0-20250531010427-b6e5de432a8b
+	github.com/spf13/cobra v1.10.1
+	github.com/spf13/pflag v1.0.10
+	golang.org/x/exp v0.0.0-20250911091902-df9299821621
 )
 
 require (
@@ -29,15 +30,15 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
-	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/tetratelabs/wazero v1.8.2 // indirect
 	go.opentelemetry.io/otel v1.31.0 // indirect
 	go.opentelemetry.io/otel/trace v1.31.0 // indirect
-	golang.org/x/mod v0.24.0 // indirect
-	golang.org/x/sync v0.14.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/mod v0.28.0 // indirect
+	golang.org/x/sync v0.17.0 // indirect
+	golang.org/x/sys v0.36.0 // indirect
+	golang.org/x/telemetry v0.0.0-20250908211612-aef8a434d053 // indirect
 	golang.org/x/text v0.6.0 // indirect
-	golang.org/x/tools v0.33.0 // indirect
+	golang.org/x/tools v0.37.0 // indirect
 	google.golang.org/genproto v0.0.0-20230110181048-76db0878b65f // indirect
 	google.golang.org/grpc v1.53.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
