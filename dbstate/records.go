@@ -10,6 +10,11 @@ import (
 type Records struct {
 	Columns []string
 	Rows    []Row
+
+	// InsertOption goes between the column list and VALUES of an INSERT.
+	// PostgreSQL needs OVERRIDING SYSTEM VALUE to write an identity column
+	// declared GENERATED ALWAYS.
+	InsertOption string
 }
 
 // Row holds the values of a record, already rendered as SQL literals
@@ -20,10 +25,13 @@ func (r Row) String() string {
 	return "(" + strings.Join(r, ", ") + ")"
 }
 
+// A generated column cannot be given a value, so it is left out.
 const qRecordColumns = `
-SELECT a.attname
+SELECT a.attname AS name,
+       a.attidentity = 'a' AS always
   FROM pg_attribute a
  WHERE a.attrelid = to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
+   AND a.attgenerated = ''
  ORDER BY a.attnum`
 
 const qPrimaryKey = `
@@ -45,17 +53,28 @@ SELECT quote_ident(a.attname)
 func GetRecords(db *sqlx.DB, table string) (*Records, error) {
 	name := quoteIdent(table)
 
-	var cols []string
-	if err := db.Select(&cols, qRecordColumns, name); err != nil {
+	var recCols []struct {
+		Name   string `db:"name"`
+		Always bool   `db:"always"`
+	}
+	if err := db.Select(&recCols, qRecordColumns, name); err != nil {
 		return nil, err
 	}
+	cols := make([]string, len(recCols))
+	rec := Records{}
+	for i, c := range recCols {
+		cols[i] = c.Name
+		if c.Always {
+			rec.InsertOption = "OVERRIDING SYSTEM VALUE "
+		}
+	}
+	rec.Columns = cols
 
 	var pk []string
 	if err := db.Select(&pk, qPrimaryKey, name); err != nil {
 		return nil, err
 	}
 
-	rec := Records{Columns: cols}
 	if len(cols) == 0 {
 		return &rec, nil
 	}

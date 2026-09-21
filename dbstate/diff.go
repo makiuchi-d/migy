@@ -16,7 +16,7 @@ func Diff(db *sqlx.DB, ss *Snapshot, ignores map[string][]string) (string, error
 	if err := diffTables(&sb, db, ss, ignores); err != nil {
 		return "", err
 	}
-	if err := diffSequences(&sb, db, ss); err != nil {
+	if err := diffObjects(&sb, db, ss); err != nil {
 		return "", err
 	}
 
@@ -45,10 +45,6 @@ func diffTables(sb *strings.Builder, db *sqlx.DB, ss *Snapshot, ignores map[stri
 		if edit.Distance() != 0 {
 			fmt.Fprintf(sb, "create table %q differs:\n", tbl.Name)
 			diffString(sb, edit, expcreate, create)
-			continue
-		}
-
-		if diffIndexes(sb, tbl, sstbl) {
 			continue
 		}
 
@@ -103,44 +99,40 @@ func diffRecords(sb *strings.Builder, db *sqlx.DB, ss *Snapshot, table string, i
 	return nil
 }
 
-func diffSequences(sb *strings.Builder, db *sqlx.DB, ss *Snapshot) error {
-	seqs, err := GetSequences(db)
+func diffObjects(sb *strings.Builder, db *sqlx.DB, ss *Snapshot) error {
+	objs, err := GetObjects(db)
 	if err != nil {
 		return err
 	}
 
-	checked := make(map[string]struct{}, len(seqs))
-	for _, seq := range seqs {
-		checked[seq.Name] = struct{}{}
+	checked := make(map[string]struct{}, len(objs))
+	for _, obj := range objs {
+		checked[obj.Name] = struct{}{}
 
-		ssseq, ok := ss.Sequences[seq.Name]
+		ssobj, ok := ss.Objects[obj.Name]
 		if !ok {
-			fmt.Fprintf(sb, "unexpected %q sequence found\n", seq.Name)
+			fmt.Fprintf(sb, "unexpected %q object found\n", obj.Name)
 			continue
 		}
-		if seq.Create != ssseq.Create {
-			fmt.Fprintf(sb, "sequence %q differs:\n-%v\n+%v\n", seq.Name, ssseq.Create, seq.Create)
+		create := strings.Split(obj.Create, "\n")
+		expcreate := strings.Split(ssobj.Create, "\n")
+
+		edit := anydiff.Diff(expcreate, create, anydiff.Cmp)
+		if edit.Distance() == 0 {
+			continue
 		}
+
+		fmt.Fprintf(sb, "object %q differs:\n", obj.Name)
+		diffString(sb, edit, expcreate, create)
 	}
 
-	for name := range ss.Sequences {
+	for name := range ss.Objects {
 		if _, ok := checked[name]; !ok {
-			fmt.Fprintf(sb, "missing %q sequence\n", name)
+			fmt.Fprintf(sb, "missing %q object\n", name)
 		}
 	}
 
 	return nil
-}
-
-// diffIndexes compares the indexes that are not backed by a constraint.
-func diffIndexes(sb *strings.Builder, tbl, sstbl *Table) bool {
-	edit := anydiff.Diff(sstbl.Indexes, tbl.Indexes, anydiff.Cmp)
-	if edit.Distance() == 0 {
-		return false
-	}
-	fmt.Fprintf(sb, "indexes on %q differ:\n", tbl.Name)
-	diffString(sb, edit, sstbl.Indexes, tbl.Indexes)
-	return true
 }
 
 func diffString[A, B any](sb *strings.Builder, edit anydiff.Edit, a []A, b []B) {

@@ -12,14 +12,20 @@ import (
 var ErrNoMigrationTable = errors.New("no '_migrations' table")
 
 // Table is a table definition reconstructed from the system catalogs.
-// PostgreSQL has no "SHOW CREATE TABLE", so Create is assembled by buildCreate.
+// PostgreSQL has no "SHOW CREATE TABLE", so Create is assembled by buildTable:
+// it holds everything needed to create the table, sequences and indexes
+// included, as a single string of one or more statements.
 type Table struct {
-	Name        string
-	Columns     []*Column
-	Constraints []*Constraint
-	Indexes     []string // CREATE INDEX statements not backed by a constraint
-	Refs        []string // tables referenced by foreign keys
-	Create      string
+	Name   string
+	Create string
+	Refs   []string // tables referenced by foreign keys
+}
+
+// Object is a schema object that belongs to no table. They are created before
+// the tables, which may refer to them.
+type Object struct {
+	Name   string
+	Create string
 }
 
 // Column is a column definition. Identifiers are already quoted by quote_ident.
@@ -74,16 +80,49 @@ func quoteIdent(name string) string {
 	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
 }
 
-// buildCreate assembles a CREATE TABLE statement from the catalog rows.
-func buildCreate(t *Table) string {
-	defs := make([]string, 0, len(t.Columns)+len(t.Constraints))
-	for _, c := range t.Columns {
+// quoteLiteral quotes a string as PostgreSQL does.
+func quoteLiteral(s string) string {
+	return `'` + strings.ReplaceAll(s, `'`, `''`) + `'`
+}
+
+// buildTable assembles everything needed to create the table: the sequences a
+// serial column refers to (they must exist first), the table itself, the
+// ownership of those sequences, the counter of every sequence of the table,
+// and the indexes not backed by a constraint.
+//
+// The counters are part of the table the same way AUTO_INCREMENT is in MySQL:
+// the records are dumped with explicit values, so nothing else advances them.
+func buildTable(name string, cols []*Column, cons []*Constraint, idxs []string, seqs []*Sequence) string {
+	var b strings.Builder
+
+	for _, s := range seqs {
+		if !s.Identity {
+			fmt.Fprintf(&b, "%s;\n", s.Create)
+		}
+	}
+
+	defs := make([]string, 0, len(cols)+len(cons))
+	for _, c := range cols {
 		defs = append(defs, "    "+c.Def())
 	}
-	for _, c := range t.Constraints {
+	for _, c := range cons {
 		defs = append(defs, fmt.Sprintf("    CONSTRAINT %s %s", c.Name, c.Def))
 	}
-	return fmt.Sprintf("CREATE TABLE %s (\n%s\n)", quoteIdent(t.Name), strings.Join(defs, ",\n"))
+	fmt.Fprintf(&b, "CREATE TABLE %s (\n%s\n);\n", quoteIdent(name), strings.Join(defs, ",\n"))
+
+	for _, s := range seqs {
+		if !s.Identity {
+			fmt.Fprintf(&b, "%s;\n", s.OwnedBy())
+		}
+	}
+	for _, s := range seqs {
+		fmt.Fprintf(&b, "%s;\n", s.SetVal())
+	}
+	for _, idx := range idxs {
+		fmt.Fprintf(&b, "%s;\n", idx)
+	}
+
+	return strings.TrimRight(b.String(), "\n")
 }
 
 const qHasMigrationTable = `
@@ -166,22 +205,22 @@ func GetTables(db *sqlx.DB) ([]*Table, error) {
 	if err := db.Select(&cols, qColumns); err != nil {
 		return nil, err
 	}
+	colmap := make(map[string][]*Column, len(names))
 	for _, c := range cols {
-		if t, ok := tblmap[c.Table]; ok {
-			t.Columns = append(t.Columns, c)
-		}
+		colmap[c.Table] = append(colmap[c.Table], c)
 	}
 
 	var cons []*Constraint
 	if err := db.Select(&cons, qConstraints); err != nil {
 		return nil, err
 	}
+	conmap := make(map[string][]*Constraint, len(names))
 	for _, c := range cons {
 		t, ok := tblmap[c.Table]
 		if !ok {
 			continue
 		}
-		t.Constraints = append(t.Constraints, c)
+		conmap[c.Table] = append(conmap[c.Table], c)
 		if r := c.RefTable; r.Valid && r.String != c.Table {
 			if _, ok := tblmap[r.String]; ok && !contains(t.Refs, r.String) {
 				t.Refs = append(t.Refs, r.String)
@@ -193,17 +232,48 @@ func GetTables(db *sqlx.DB) ([]*Table, error) {
 	if err := db.Select(&idxs, qIndexes); err != nil {
 		return nil, err
 	}
+	idxmap := make(map[string][]string, len(names))
 	for _, i := range idxs {
-		if t, ok := tblmap[i.Table]; ok {
-			t.Indexes = append(t.Indexes, i.Def)
+		idxmap[i.Table] = append(idxmap[i.Table], i.Def)
+	}
+
+	seqs, err := GetSequences(db)
+	if err != nil {
+		return nil, err
+	}
+	seqmap := make(map[string][]*Sequence, len(names))
+	for _, s := range seqs {
+		if s.OwnerTable.Valid {
+			seqmap[s.OwnerTable.String] = append(seqmap[s.OwnerTable.String], s)
 		}
 	}
 
-	for _, t := range tblmap {
-		t.Create = buildCreate(t)
+	for n, t := range tblmap {
+		t.Create = buildTable(n, colmap[n], conmap[n], idxmap[n], seqmap[n])
 	}
 
 	return sortTables(names, tblmap)
+}
+
+// GetObjects returns the schema objects that belong to no table.
+func GetObjects(db *sqlx.DB) ([]*Object, error) {
+	seqs, err := GetSequences(db)
+	if err != nil {
+		return nil, err
+	}
+
+	objs := make([]*Object, 0, len(seqs))
+	for _, s := range seqs {
+		if s.OwnerTable.Valid {
+			continue
+		}
+		objs = append(objs, &Object{
+			Name:   s.Name,
+			Create: fmt.Sprintf("%s;\n%s;", s.Create, s.SetVal()),
+		})
+	}
+
+	return objs, nil
 }
 
 func contains(ss []string, s string) bool {
@@ -262,8 +332,9 @@ func sortTables(names []string, tblmap map[string]*Table) ([]*Table, error) {
 	return tbls, nil
 }
 
-// Sequence is a sequence not owned by an identity column
-// (identity sequences are created by the column definition itself).
+// Sequence is a sequence with its current counter.
+// An identity sequence is created by the column definition itself, so its
+// Create is empty and only the counter is used.
 type Sequence struct {
 	Name        string         `db:"name"`
 	Type        string         `db:"type"`
@@ -273,8 +344,11 @@ type Sequence struct {
 	Max         int64          `db:"max"`
 	Cache       int64          `db:"cache"`
 	Cycle       bool           `db:"cycle"`
+	Identity    bool           `db:"identity"`
 	OwnerTable  sql.NullString `db:"owner_table"`
 	OwnerColumn sql.NullString `db:"owner_column"`
+	Last        int64          `db:"last_value"`
+	IsCalled    bool           `db:"is_called"`
 	Create      string
 }
 
@@ -286,6 +360,12 @@ func (s *Sequence) OwnedBy() string {
 	}
 	return fmt.Sprintf("ALTER SEQUENCE %s OWNED BY %s.%s",
 		quoteIdent(s.Name), quoteIdent(s.OwnerTable.String), s.OwnerColumn.String)
+}
+
+// SetVal returns the statement that restores the current counter.
+func (s *Sequence) SetVal() string {
+	return fmt.Sprintf("SELECT setval(%s, %d, %v)",
+		quoteLiteral(quoteIdent(s.Name)), s.Last, s.IsCalled)
 }
 
 func buildCreateSequence(s *Sequence) string {
@@ -304,6 +384,7 @@ SELECT c.relname AS name,
        format_type(s.seqtypid, NULL) AS type,
        s.seqstart AS start, s.seqincrement AS increment,
        s.seqmin AS min, s.seqmax AS max, s.seqcache AS cache, s.seqcycle AS cycle,
+       coalesce(a.attidentity, '') <> '' AS identity,
        tc.relname AS owner_table,
        quote_ident(a.attname) AS owner_column
   FROM pg_sequence s
@@ -312,55 +393,29 @@ SELECT c.relname AS name,
   LEFT JOIN pg_depend d ON d.classid = 'pg_class'::regclass AND d.objid = c.oid
                        AND d.refclassid = 'pg_class'::regclass AND d.deptype IN ('a', 'i')
   LEFT JOIN pg_class tc ON tc.oid = d.refobjid
+                       AND tc.relkind = 'r' AND tc.relpersistence = 'p'
   LEFT JOIN pg_attribute a ON a.attrelid = d.refobjid AND a.attnum = d.refobjsubid
  WHERE n.nspname = current_schema()
-   AND coalesce(a.attidentity, '') = ''
  ORDER BY c.relname`
 
-// GetSequences returns the sequences that have to be created explicitly.
+// GetSequences returns every sequence of the schema with its current counter.
+// The counter is read from the sequence itself: deriving it from the table
+// data would lose a counter set by setval or advanced past the rows.
 func GetSequences(db *sqlx.DB) ([]*Sequence, error) {
 	var seqs []*Sequence
 	if err := db.Select(&seqs, qSequences); err != nil {
 		return nil, err
 	}
+
 	for _, s := range seqs {
-		s.Create = buildCreateSequence(s)
-	}
-	return seqs, nil
-}
-
-// SequenceValue is the current counter of a sequence, identity ones included.
-type SequenceValue struct {
-	Name     string
-	Last     int64 `db:"last_value"`
-	IsCalled bool  `db:"is_called"`
-}
-
-const qSequenceNames = `
-SELECT c.relname
-  FROM pg_class c
-  JOIN pg_namespace n ON n.oid = c.relnamespace
- WHERE n.nspname = current_schema() AND c.relkind = 'S'
- ORDER BY c.relname`
-
-// GetSequenceValues returns the current counter of every sequence.
-// The value is read from the sequence itself: deriving it from the table data
-// would lose a counter set by setval or advanced past the rows.
-func GetSequenceValues(db *sqlx.DB) ([]*SequenceValue, error) {
-	var names []string
-	if err := db.Select(&names, qSequenceNames); err != nil {
-		return nil, err
-	}
-
-	vals := make([]*SequenceValue, 0, len(names))
-	for _, n := range names {
-		v := SequenceValue{Name: n}
-		q := fmt.Sprintf("SELECT last_value, is_called FROM %s", quoteIdent(n))
-		if err := db.Get(&v, q); err != nil {
+		q := fmt.Sprintf("SELECT last_value, is_called FROM %s", quoteIdent(s.Name))
+		if err := db.Get(s, q); err != nil {
 			return nil, err
 		}
-		vals = append(vals, &v)
+		if !s.Identity {
+			s.Create = buildCreateSequence(s)
+		}
 	}
 
-	return vals, nil
+	return seqs, nil
 }

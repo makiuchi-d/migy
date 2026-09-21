@@ -7,9 +7,9 @@ import (
 )
 
 type Snapshot struct {
-	Tables    map[string]*Table
-	Records   map[string]*Records
-	Sequences map[string]*Sequence
+	Tables  map[string]*Table
+	Records map[string]*Records
+	Objects map[string]*Object
 }
 
 func TakeSnapshot(db *sqlx.DB) (*Snapshot, error) {
@@ -29,18 +29,18 @@ func TakeSnapshot(db *sqlx.DB) (*Snapshot, error) {
 		recmap[n] = rec
 	}
 
-	seqs, err := GetSequences(db)
+	objs, err := GetObjects(db)
 	if err != nil {
 		return nil, err
 	}
-	seqmap := make(map[string]*Sequence, len(seqs))
-	for i := range seqs {
-		seqmap[seqs[i].Name] = seqs[i]
+	objmap := make(map[string]*Object, len(objs))
+	for i := range objs {
+		objmap[objs[i].Name] = objs[i]
 	}
 
 	return &Snapshot{
-		Tables:    tblmap,
-		Records:   recmap,
-		Sequences: seqmap,
+		Tables:  tblmap,
+		Records: recmap,
+		Objects: objmap,
 	}, nil
 }
