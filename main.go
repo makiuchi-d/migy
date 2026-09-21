@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
-	"github.com/makiuchi-d/testdb"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -151,7 +150,10 @@ func openDSN(dsn string) (*sqlx.DB, error) {
 }
 
 func openDumpfile(dumpfile string) (*sqlx.DB, error) {
-	db := sqlx.NewDb(testdb.New("db"), "mysql")
+	db, err := openTempDB()
+	if err != nil {
+		return nil, err
+	}
 	if err := sqlfile.Apply(db, dumpfile); err != nil {
 		return nil, err
 	}

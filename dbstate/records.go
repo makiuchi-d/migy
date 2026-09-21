@@ -3,7 +3,6 @@ package dbstate
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -13,87 +12,81 @@ type Records struct {
 	Rows    []Row
 }
 
-type Row []any
+// Row holds the values of a record, already rendered as SQL literals
+// by quote_nullable(): a NULL is the bare word NULL.
+type Row []string
 
 func (r Row) String() string {
-	if len(r) == 0 {
-		return "()"
-	}
-	b := []byte{'('}
-	for _, col := range r {
-		switch v := (*col.(*any)).(type) {
-		case int, int8, int16, int32, int64,
-			uint, uint8, uint16, uint32, uint64,
-			float32, float64:
-			b = fmt.Appendf(b, "%v, ", v)
-		case time.Time:
-			b = v.AppendFormat(b, "'2006-01-02 15:04:05', ")
-		default:
-			b = append(b, []byte(quotedValue(v))...)
-			b = append(b, ',', ' ')
-		}
-	}
-	b[len(b)-2] = ')'
-	return string(b[:len(b)-1])
+	return "(" + strings.Join(r, ", ") + ")"
 }
 
-func quotedValue(v any) string {
-	s := fmt.Sprintf("%v", v)
-	var b strings.Builder
-	b.Grow(len(s) + 2)
+const qRecordColumns = `
+SELECT a.attname
+  FROM pg_attribute a
+ WHERE a.attrelid = to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
+ ORDER BY a.attnum`
 
-	b.WriteByte('\'')
-	for _, c := range s {
-		switch c {
-		case 0:
-			b.WriteString("\\0")
-		case 26: // ^Z, SUB
-			b.WriteString("\\Z")
-		case '\b':
-			b.WriteString("\\b")
-		case '\n':
-			b.WriteString("\\n")
-		case '\r':
-			b.WriteString("\\r")
-		case '\t':
-			b.WriteString("\\t")
-		case '\'', '\\', '%':
-			b.WriteByte('\\')
-			b.WriteRune(c)
-		default:
-			b.WriteRune(c)
-		}
-	}
-	b.WriteByte('\'')
-	return b.String()
-}
+const qPrimaryKey = `
+SELECT quote_ident(a.attname)
+  FROM pg_index i
+  JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+ WHERE i.indrelid = to_regclass($1) AND i.indisprimary
+ ORDER BY array_position(i.indkey::int2[], a.attnum)`
 
+// GetRecords returns all records of the table as SQL literals.
+//
+// Rendering is left to the server: quote_nullable() applies the output
+// function of each type, so json, bytea, arrays and the like come back in a
+// form that can be fed straight back into an INSERT, with no guessing from
+// whatever Go type the driver happened to choose.
+//
+// Rows are ordered by the primary key. The heap order of PostgreSQL is not
+// stable (an UPDATE moves the row), which would show up as a false difference.
 func GetRecords(db *sqlx.DB, table string) (*Records, error) {
-	rows, err := db.Query(fmt.Sprintf("SELECT * FROM `%s`", table))
+	name := quoteIdent(table)
+
+	var cols []string
+	if err := db.Select(&cols, qRecordColumns, name); err != nil {
+		return nil, err
+	}
+
+	var pk []string
+	if err := db.Select(&pk, qPrimaryKey, name); err != nil {
+		return nil, err
+	}
+
+	rec := Records{Columns: cols}
+	if len(cols) == 0 {
+		return &rec, nil
+	}
+
+	quoted := make([]string, len(cols))
+	for i, c := range cols {
+		quoted[i] = fmt.Sprintf("quote_nullable(%s)", quoteIdent(c))
+	}
+
+	q := fmt.Sprintf("SELECT %s FROM %s", strings.Join(quoted, ", "), name)
+	if len(pk) > 0 {
+		q += " ORDER BY " + strings.Join(pk, ", ")
+	}
+
+	rows, err := db.Query(q)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	cols, err := rows.Columns()
-	if err != nil {
-		return nil, err
-	}
-
-	rec := Records{
-		Columns: cols,
-	}
-
 	for rows.Next() {
-		row := make([]any, len(cols))
-		for i := range len(cols) {
-			row[i] = new(any)
+		row := make(Row, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range row {
+			ptrs[i] = &row[i]
 		}
-		if err := rows.Scan(row...); err != nil {
+		if err := rows.Scan(ptrs...); err != nil {
 			return nil, err
 		}
 		rec.Rows = append(rec.Rows, row)
 	}
 
-	return &rec, nil
+	return &rec, rows.Err()
 }

@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jmoiron/sqlx"
-	"github.com/makiuchi-d/testdb"
 	"github.com/spf13/cobra"
 
 	"github.com/makiuchi-d/migy/migrations"
@@ -62,7 +60,11 @@ func snapshotToSQLFile(dir string, num int, overwrite bool) error {
 		return err
 	}
 
-	db := sqlx.NewDb(testdb.New("db"), "mysql")
+	db, err := openTempDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
 
 	for _, file := range files {
 		info("applying:", file)

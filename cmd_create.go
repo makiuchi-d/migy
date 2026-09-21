@@ -40,8 +40,7 @@ INSERT INTO _migrations (id, title, applied) VALUES ({{.Number}}, '{{.Title}}', 
 `
 
 	createDownSQL = signature + `
-CALL _migration_exists({{.Number}});
-DELETE FROM _migrations WHERE id = {{.Number}};
+WITH deleted AS (DELETE FROM _migrations WHERE id={{.Number}} RETURNING id) SELECT 1/count(*) FROM deleted;
 -- Write your rollback SQL statements below.
 `
 )

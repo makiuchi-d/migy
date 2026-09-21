@@ -8,8 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jmoiron/sqlx"
-	"github.com/makiuchi-d/testdb"
 	"github.com/spf13/cobra"
 
 	"github.com/makiuchi-d/migy/dbstate"
@@ -131,7 +129,10 @@ func checkMigration(dir string, num int) (string, error) {
 		return "", err
 	}
 
-	db := sqlx.NewDb(testdb.New("db"), "mysql")
+	db, err := openTempDB()
+	if err != nil {
+		return "", err
+	}
 	defer db.Close()
 
 	for _, file := range files {
@@ -181,8 +182,11 @@ func checkMigration(dir string, num int) (string, error) {
 	}
 
 	info("---- snapshot")
-	db2 := sqlx.NewDb(testdb.New("db2"), "mysql")
-	defer db2.Close()
+	// the cluster takes seconds to start, so empty the current one instead
+	db2, err := resetTempDB(db)
+	if err != nil {
+		return "", err
+	}
 	info("applying:", mig.SnapshotName())
 	if err := sqlfile.Apply(db2, filepath.Join(dir, mig.SnapshotName())); err != nil {
 		return "", err

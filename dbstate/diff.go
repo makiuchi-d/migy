@@ -16,7 +16,7 @@ func Diff(db *sqlx.DB, ss *Snapshot, ignores map[string][]string) (string, error
 	if err := diffTables(&sb, db, ss, ignores); err != nil {
 		return "", err
 	}
-	if err := diffProcedures(&sb, db, ss); err != nil {
+	if err := diffSequences(&sb, db, ss); err != nil {
 		return "", err
 	}
 
@@ -48,6 +48,10 @@ func diffTables(sb *strings.Builder, db *sqlx.DB, ss *Snapshot, ignores map[stri
 			continue
 		}
 
+		if diffIndexes(sb, tbl, sstbl) {
+			continue
+		}
+
 		err = diffRecords(sb, db, ss, tbl.Name, ignores)
 		if err != nil {
 			return err
@@ -75,13 +79,14 @@ func diffRecords(sb *strings.Builder, db *sqlx.DB, ss *Snapshot, table string, i
 	}
 
 	cmp := func(a, b *Row) bool {
-		for i := range len(*a) {
-			if slices.Contains(ign, after.Columns[i]) {
+		if len(*a) != len(*b) {
+			return false
+		}
+		for i := range *a {
+			if i < len(after.Columns) && slices.Contains(ign, after.Columns[i]) {
 				continue
 			}
-			ai := (*a)[i].(*any)
-			bi := (*b)[i].(*any)
-			if *ai != *bi {
+			if (*a)[i] != (*b)[i] {
 				return false
 			}
 		}
@@ -98,40 +103,44 @@ func diffRecords(sb *strings.Builder, db *sqlx.DB, ss *Snapshot, table string, i
 	return nil
 }
 
-func diffProcedures(sb *strings.Builder, db *sqlx.DB, ss *Snapshot) error {
-	procs, err := GetProcedures(db)
+func diffSequences(sb *strings.Builder, db *sqlx.DB, ss *Snapshot) error {
+	seqs, err := GetSequences(db)
 	if err != nil {
-		return nil
+		return err
 	}
 
-	checked := make(map[string]struct{}, len(procs))
-	for _, proc := range procs {
-		checked[proc.Name] = struct{}{}
+	checked := make(map[string]struct{}, len(seqs))
+	for _, seq := range seqs {
+		checked[seq.Name] = struct{}{}
 
-		ssproc, ok := ss.Procedures[proc.Name]
+		ssseq, ok := ss.Sequences[seq.Name]
 		if !ok {
-			fmt.Fprintf(sb, "unexpected %q stored procedure found\n", proc.Name)
+			fmt.Fprintf(sb, "unexpected %q sequence found\n", seq.Name)
 			continue
 		}
-		create := strings.Split(proc.Create, "\n")
-		expcreate := strings.Split(ssproc.Create, "\n")
-
-		edit := anydiff.Diff(expcreate, create, anydiff.Cmp)
-		if edit.Distance() == 0 {
-			continue
+		if seq.Create != ssseq.Create {
+			fmt.Fprintf(sb, "sequence %q differs:\n-%v\n+%v\n", seq.Name, ssseq.Create, seq.Create)
 		}
-
-		fmt.Fprintf(sb, "stored procedure %q differs:\n", proc.Name)
-		diffString(sb, edit, expcreate, create)
 	}
 
-	for name := range ss.Procedures {
+	for name := range ss.Sequences {
 		if _, ok := checked[name]; !ok {
-			fmt.Fprintf(sb, "missing %q stored procedure", name)
+			fmt.Fprintf(sb, "missing %q sequence\n", name)
 		}
 	}
 
 	return nil
+}
+
+// diffIndexes compares the indexes that are not backed by a constraint.
+func diffIndexes(sb *strings.Builder, tbl, sstbl *Table) bool {
+	edit := anydiff.Diff(sstbl.Indexes, tbl.Indexes, anydiff.Cmp)
+	if edit.Distance() == 0 {
+		return false
+	}
+	fmt.Fprintf(sb, "indexes on %q differ:\n", tbl.Name)
+	diffString(sb, edit, sstbl.Indexes, tbl.Indexes)
+	return true
 }
 
 func diffString[A, B any](sb *strings.Builder, edit anydiff.Edit, a []A, b []B) {
